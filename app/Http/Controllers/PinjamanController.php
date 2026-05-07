@@ -97,4 +97,16 @@ class PinjamanController extends Controller
             200
         );
     }
+    public function destroy($id_pinjaman): JsonResponse
+{
+    $pinjaman = Pinjaman::find($id_pinjaman);
+
+    if (!$pinjaman) {
+        return $this->errorResponse('Data pinjaman tidak ditemukan.', null, 404);
+    }
+
+    $pinjaman->delete();
+
+    return $this->successResponse('Pinjaman berhasil dihapus.', null, 200);
+}
 }

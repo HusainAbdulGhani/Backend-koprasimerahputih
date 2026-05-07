@@ -97,8 +97,10 @@ return new class extends Migration
             $table->unsignedBigInteger('id_pinjaman');
             $table->double('jumlah_bayar');
             $table->date('tanggal_bayar');
+            $table->string('bukti_transfer')->nullable();
+            $table->enum('status', ['Pending', 'Verified', 'Rejected'])->default('Pending');
             $table->double('sisa_pinjaman');
-
+        
             $table->foreign('id_pinjaman')->references('id_pinjaman')->on('pinjamans')->cascadeOnDelete();
         });
 

@@ -15,6 +15,8 @@ class Angsuran extends Model
         'jumlah_bayar',
         'tanggal_bayar',
         'sisa_pinjaman',
+        'bukti_transfer', 
+        'status',
     ];
 
     protected function casts(): array
