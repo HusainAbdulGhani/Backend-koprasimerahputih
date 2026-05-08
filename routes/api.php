@@ -5,7 +5,9 @@ use App\Http\Controllers\PinjamanController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UsulanStokController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\AngsuranController; // Pastikan pakai Controller, bukan Model
+use App\Http\Controllers\AngsuranController;
+use App\Http\Controllers\AnggotaController;
+use App\Http\Controllers\SimpananController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -36,20 +38,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pinjamans/{id_pinjaman}', [PinjamanController::class, 'destroy']);
     });
 
+    // Modul Simpanan
+    Route::middleware('role:Admin,Pengurus,Kasir,')->group(function () {
+        Route::get('/simpanans', [SimpananController::class, 'index']);
+        Route::post('/simpanans', [SimpananController::class, 'store']);
+    });
+
     // --- FITUR PINJAMAN & TRANSAKSI ---
     // Cek Status (Semua Role terkait)
     Route::middleware('role:Anggota,Pengurus,Admin')->group(function () {
         Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
+        Route::get('/simpanans/saldo/{id_anggota}', [SimpananController::class, 'cekSaldo']);
     });
 
     // Kasir (Belanja/Checkout)
     Route::middleware('role:Kasir')->group(function () {
-        Route::patch('/angsurans/{id_angsuran}/verify', [AngsuranController::class, 'verify']);
         Route::post('/checkout', [TransactionController::class, 'checkout']);
     });
 
     // Pengurus & Admin (Approval)
     Route::middleware('role:Pengurus,Admin')->group(function () {
+        Route::apiResource('anggota', AnggotaController::class);
+        Route::patch('/angsurans/{id_angsuran}/verify', [AngsuranController::class, 'verify']);
         Route::patch('/pinjamans/{id_pinjaman}/approve', [PinjamanController::class, 'approve']);
         Route::patch('/usulan-stoks/{id_usulan}/approve', [UsulanStokController::class, 'approveUsulan']);
     });
