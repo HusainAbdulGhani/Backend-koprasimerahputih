@@ -4,33 +4,44 @@ namespace App\Http\Controllers;
 
 use App\Models\Produk;
 use Illuminate\Http\Request;
+use App\Traits\ApiResponse; // Pastikan Trait ini di-import
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 
 class ProdukController extends Controller
 {
+    use ApiResponse;
+
     // List semua produk (Bisa diakses Kasir, Admin, Gudang)
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        // Fitur Search: Biar kasir bisa cari berdasarkan nama_produk
-        $query = Produk::query();
+        // Eager load supplier biar data lengkap
+        $query = Produk::with('supplier');
 
         if ($request->has('search')) {
             $query->where('nama_produk', 'like', '%' . $request->search . '%');
         }
 
-        $produk = $query->get();
+        // Filter berdasarkan supplier jika dibutuhkan
+        if ($request->has('id_supplier')) {
+            $query->where('id_supplier', $request->id_supplier);
+        }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Daftar Produk Koperasi',
-            'data'    => $produk
-        ]);
+        $produk = $query->orderBy('nama_produk', 'asc')->get();
+
+        // Virtual attribute untuk warning stok < 100 (untuk frontend)
+        $produk->transform(function ($item) {
+            $item->is_low_stock = ((int) ($item->stok ?? 0)) < 100;
+            return $item;
+        });
+
+        return $this->successResponse('Daftar Produk Koperasi', $produk);
     }
 
-    // Tambah Produk Baru (Gudang/Admin)
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
+            'id_supplier' => 'required|exists:suppliers,id_supplier', // Validasi relasi
             'nama_produk' => 'required|string|max:255',
             'harga_beli'  => 'required|numeric|min:0',
             'harga_jual'  => 'required|numeric|min:0',
@@ -38,80 +49,58 @@ class ProdukController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors'  => $validator->errors()
-            ], 422);
+            return $this->errorResponse('Validasi gagal', $validator->errors(), 422);
         }
 
         if ($request->harga_jual < $request->harga_beli) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Harga jual tidak boleh lebih rendah dari harga beli!'
-            ], 400);
+            return $this->errorResponse('Harga jual tidak boleh lebih rendah dari harga beli!', null, 400);
         }
 
         $produk = Produk::create($request->all());
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Produk berhasil ditambahkan',
-            'data'    => $produk
-        ], 201);
+        return $this->successResponse('Produk berhasil ditambahkan', $produk, 201);
     }
 
-    // Detail Produk
-    public function show($id)
+    public function show($id): JsonResponse
     {
-        $produk = Produk::where('id_produk', $id)->first();
+        $produk = Produk::with('supplier')->where('id_produk', $id)->first();
 
         if (!$produk) {
-            return response()->json(['success' => false, 'message' => 'Produk tidak ditemukan'], 404);
+            return $this->errorResponse('Produk tidak ditemukan', null, 404);
         }
 
-        return response()->json([
-            'success' => true,
-            'data'    => $produk
-        ]);
+        return $this->successResponse('Detail Produk', $produk);
     }
 
-    // Update Produk (Gudang/Admin)
-    public function update(Request $request, $id)
+    public function update(Request $request, $id): JsonResponse
     {
         $produk = Produk::where('id_produk', $id)->first();
-        if (!$produk) return response()->json(['message' => 'Produk tidak ditemukan'], 404);
+        if (!$produk) return $this->errorResponse('Produk tidak ditemukan', null, 404);
 
         $validator = Validator::make($request->all(), [
+            'id_supplier' => 'sometimes|exists:suppliers,id_supplier',
             'nama_produk' => 'sometimes|string|max:255',
-            'harga_beli'  => 'sometimes|numeric',
-            'harga_jual'  => 'sometimes|numeric',
-            'stok'        => 'sometimes|integer',
+            'harga_beli'  => 'sometimes|numeric|min:0',
+            'harga_jual'  => 'sometimes|numeric|min:0',
+            'stok'        => 'sometimes|integer|min:0',
         ]);
 
         if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
+            return $this->errorResponse('Validasi gagal', $validator->errors(), 422);
         }
 
         $produk->update($request->all());
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Produk berhasil diupdate',
-            'data'    => $produk
-        ]);
+        return $this->successResponse('Produk berhasil diupdate', $produk);
     }
 
-    // Hapus Produk
-    public function destroy($id)
+    public function destroy($id): JsonResponse
     {
         $produk = Produk::where('id_produk', $id)->first();
-        if (!$produk) return response()->json(['message' => 'Produk tidak ditemukan'], 404);
+        if (!$produk) return $this->errorResponse('Produk tidak ditemukan', null, 404);
 
         $produk->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Produk berhasil dihapus'
-        ]);
+        return $this->successResponse('Produk berhasil dihapus', null);
     }
 }

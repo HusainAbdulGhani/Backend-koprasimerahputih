@@ -61,6 +61,7 @@ class PinjamanController extends Controller
             $pinjaman->status = 'Approved';
             $pinjaman->id_pengurus_acc = $pengurus->id_pengurus;
             $pinjaman->save();
+            app(\App\Services\JurnalService::class)->catatPinjamanDisetujui($pinjaman);
 
             DB::commit();
 

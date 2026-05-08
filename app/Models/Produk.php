@@ -11,6 +11,7 @@ class Produk extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'id_supplier',
         'nama_produk',
         'harga_beli',
         'harga_jual',
@@ -20,6 +21,11 @@ class Produk extends Model
     public function detailTransaksi()
     {
         return $this->hasMany(DetailTransaksi::class, 'id_produk', 'id_produk');
+    }
+
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class, 'id_supplier', 'id_supplier');
     }
 
     public function usulanStoks()

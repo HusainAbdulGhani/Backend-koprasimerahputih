@@ -22,19 +22,39 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Buat Cabang Contoh
-        $cabang = Cabang::firstOrCreate(
-            ['nama_cabang' => 'Bandung Pusat'],
-            ['lokasi' => 'Jl. Merdeka No. 45, Bandung']
-        );
+        // 1. Buat Master Cabang sesuai dokumen
+        // Bandung 5, Jakarta 5, Bekasi 5, Serang 3, Cilegon 2 = 20 cabang
+        $cabangList = [];
+        foreach (['Bandung' => 5, 'Jakarta' => 5, 'Bekasi' => 5, 'Serang' => 3, 'Cilegon' => 2] as $kota => $jumlah) {
+            for ($i = 1; $i <= $jumlah; $i++) {
+                $cabangList[] = [
+                    'nama_cabang' => $kota.' '.$i,
+                    'lokasi' => 'Kota '.$kota.' - Cabang '.$i,
+                ];
+            }
+        }
+
+        foreach ($cabangList as $row) {
+            Cabang::firstOrCreate(
+                ['nama_cabang' => $row['nama_cabang']],
+                ['lokasi' => $row['lokasi']]
+            );
+        }
+
+        // Default cabang untuk sample users
+        $cabang = Cabang::where('nama_cabang', 'Bandung 1')->first()
+            ?? Cabang::first();
 
         // 2. Buat Akun COA (Laci Akuntansi)
         $coa = [
-            ['nama_akun' => 'Kas Tunai', 'jenis' => 'Aset'],
-            ['nama_akun' => 'Pendapatan Penjualan Toko', 'jenis' => 'Pendapatan'],
+            // Samakan dengan nama akun yang dipakai di JurnalService
+            ['nama_akun' => 'Kas', 'jenis' => 'Aset'],
+            ['nama_akun' => 'Penjualan', 'jenis' => 'Pendapatan'],
+            ['nama_akun' => 'Piutang', 'jenis' => 'Aset'],
             ['nama_akun' => 'Simpanan Anggota', 'jenis' => 'Kewajiban'],
-            ['nama_akun' => 'Pendapatan Bunga & Biaya Op', 'jenis' => 'Pendapatan'],
-            ['nama_akun' => 'Persediaan Barang Dagangan', 'jenis' => 'Aset'],
+            ['nama_akun' => 'Pendapatan Biaya Operasional', 'jenis' => 'Pendapatan'],
+            ['nama_akun' => 'Persediaan Barang', 'jenis' => 'Aset'],
+            ['nama_akun' => 'HPP', 'jenis' => 'Beban'],
         ];
         foreach ($coa as $item) {
             Akun::firstOrCreate(

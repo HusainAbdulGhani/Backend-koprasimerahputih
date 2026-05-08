@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DetailTransaksi;
 use App\Models\Produk;
 use App\Models\TransaksiPos;
+use App\Services\JurnalService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -82,10 +83,14 @@ class TransactionService
                 ]);
             }
 
+            // Jurnal otomatis POS + HPP (wajib setelah detail transaksi tersimpan)
+            $transaksiForJurnal = $transaksi->fresh()->load(['kasir', 'detailTransaksi.produk']);
+            app(JurnalService::class)->catatTransaksiPosDanHpp($transaksiForJurnal);
+
             DB::commit();
 
             return [
-                'transaksi' => $transaksi->load('detailTransaksi'),
+                'transaksi' => $transaksi->load(['kasir.cabang', 'detailTransaksi.produk']),
                 'details' => $savedDetails,
                 'warnings' => $warnings,
             ];

@@ -19,4 +19,8 @@ class Supplier extends Model
     {
         return $this->hasMany(UsulanStok::class, 'id_supplier', 'id_supplier');
     }
+    public function produks()
+    {
+        return $this->hasMany(Produk::class, 'id_supplier', 'id_supplier');
+    }
 }

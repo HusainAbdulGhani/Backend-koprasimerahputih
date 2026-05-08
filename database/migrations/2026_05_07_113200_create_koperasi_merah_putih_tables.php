@@ -120,6 +120,7 @@ return new class extends Migration
 
         Schema::create('usulan_stoks', function (Blueprint $table) {
             $table->id('id_usulan');
+            $table->unsignedBigInteger('id_cabang');
             $table->unsignedBigInteger('id_produk');
             $table->unsignedBigInteger('id_gudang');
             $table->unsignedBigInteger('id_pengurus_acc');

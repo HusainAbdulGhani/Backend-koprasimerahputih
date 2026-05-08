@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\AngsuranController;
 use App\Http\Controllers\AnggotaController;
 use App\Http\Controllers\SimpananController;
+use App\Http\Controllers\ProdukController;
+use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\Api\ReportController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -21,47 +24,61 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json($request->user());
     });
 
-    // Dashboard (Bisa diakses semua role yang login)
+    // Dashboard (Akses Semua Role)
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
-    // --- FITUR ANGSURAN (SELF-SERVICE) ---
-    // Anggota upload bukti
+    // --- FITUR ANGGOTA (SELF-SERVICE) ---
     Route::middleware('role:Anggota')->group(function () {
-        Route::post('/angsurans', [AngsuranController::class, 'store']);
-        Route::post('/pinjamans', [PinjamanController::class, 'store']);
-        Route::get('/angsurans/history',[AngsuranController::class, 'history']);
-        Route::get('/angsurans/{id_pinjaman}/sisa',[AngsuranController::class, 'checkSisa']);
+        Route::post('/angsurans', [AngsuranController::class, 'store']); // Ajukan Bayar
+        Route::post('/pinjamans', [PinjamanController::class, 'store']); // Ajukan Pinjam
+        Route::get('/my-history', [AngsuranController::class, 'history']); 
+        Route::get('/my-loan-remaining/{id_pinjaman}', [AngsuranController::class, 'checkSisa']);
     });
 
-    // Admin Verifikasi Angsuran & Hapus Pinjaman
-    Route::middleware('role:Admin')->group(function () {
-        Route::delete('/pinjamans/{id_pinjaman}', [PinjamanController::class, 'destroy']);
-    });
-
-    // Modul Simpanan
-    Route::middleware('role:Admin,Pengurus,Kasir,')->group(function () {
+    // --- MODUL KASIR (POS & SIMPANAN) ---
+    Route::middleware('role:Kasir,Admin')->group(function () {
+        Route::post('/checkout', [TransactionController::class, 'checkout']);
+        Route::get('/transactions/{id_transaksi}/receipt', [TransactionController::class, 'receipt']);
         Route::get('/simpanans', [SimpananController::class, 'index']);
         Route::post('/simpanans', [SimpananController::class, 'store']);
+        Route::get('/produks/list', [ProdukController::class, 'index']); // Kasir butuh liat stok buat jualan
     });
 
-    // --- FITUR PINJAMAN & TRANSAKSI ---
-    // Cek Status (Semua Role terkait)
-    Route::middleware('role:Anggota,Pengurus,Admin')->group(function () {
-        Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
-        Route::get('/simpanans/saldo/{id_anggota}', [SimpananController::class, 'cekSaldo']);
+    // --- MODUL LOGISTIK (GUDANG) ---
+    Route::middleware('role:Gudang,Admin')->group(function () {
+        Route::apiResource('produks', ProdukController::class)->except(['index']); 
+        Route::apiResource('suppliers', SupplierController::class);
+        Route::post('/usulan-stoks', [UsulanStokController::class, 'store']);
+        Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
     });
 
-    // Kasir (Belanja/Checkout)
-    Route::middleware('role:Kasir')->group(function () {
-        Route::post('/checkout', [TransactionController::class, 'checkout']);
-    });
-
-    // Pengurus & Admin (Approval)
+    // --- MODUL APPROVAL (PENGURUS & ADMIN) ---
     Route::middleware('role:Pengurus,Admin')->group(function () {
         Route::apiResource('anggota', AnggotaController::class);
         Route::patch('/angsurans/{id_angsuran}/verify', [AngsuranController::class, 'verify']);
         Route::patch('/pinjamans/{id_pinjaman}/approve', [PinjamanController::class, 'approve']);
         Route::patch('/usulan-stoks/{id_usulan}/approve', [UsulanStokController::class, 'approveUsulan']);
+        Route::get('/reports/sales', [ReportController::class, 'sales']);
+        Route::get('/reports/shu', [ReportController::class, 'shu']);
+        Route::get('/reports/jurnal-umum', [ReportController::class, 'jurnalUmum']);
+        Route::get('/reports/buku-besar', [ReportController::class, 'bukuBesar']);
+        Route::get('/reports/neraca', [ReportController::class, 'neraca']);
+        Route::get('/reports/laba-rugi', [ReportController::class, 'labaRugi']);
+        Route::get('/reports/shu-final', [ReportController::class, 'shuFinal']);
+        Route::get('/reports/anggota', [ReportController::class, 'anggota']);
+        Route::get('/reports/simpanan', [ReportController::class, 'simpanan']);
+        Route::get('/reports/persediaan', [ReportController::class, 'persediaan']);
+        
+        // Cek Detail (Global Access for Management)
+        Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
+        Route::get('/simpanans/saldo/{id_anggota}', [SimpananController::class, 'cekSaldo']);
+    });
+
+    // --- SUPER ADMIN ONLY ---
+    Route::middleware('role:Admin')->group(function () {
+        Route::patch('/anggota/{id_anggota}/activate', [AnggotaController::class, 'activate']);
+        Route::delete('/pinjamans/{id_pinjaman}', [PinjamanController::class, 'destroy']);
+        
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);

@@ -23,7 +23,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        TransaksiPos::observe(TransaksiPosObserver::class);
         Simpanan::observe(SimpananObserver::class);
     }
 }

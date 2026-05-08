@@ -13,11 +13,13 @@ class UsulanStok extends Model
     protected $fillable = [
         'id_produk',
         'id_gudang',
-        'id_pengurus_acc',
         'id_supplier',
+        'id_cabang',
         'jumlah',
+        'harga_beli',
         'status',
-        'tanggal_usulan',
+        'id_pengurus_acc', 
+        'tanggal_usulan'
     ];
 
     protected function casts(): array

@@ -13,6 +13,8 @@ class Angsuran extends Model
     protected $fillable = [
         'id_pinjaman',
         'jumlah_bayar',
+        'pokok_bayar',
+        'fee_bayar',
         'tanggal_bayar',
         'sisa_pinjaman',
         'bukti_transfer', 

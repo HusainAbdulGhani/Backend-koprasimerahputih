@@ -11,6 +11,7 @@ class CheckRole
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
+        $roles = array_values(array_filter(array_map(static fn (string $r) => trim($r), $roles)));
 
         if (! $user) {
             return response()->json([
@@ -19,6 +20,10 @@ class CheckRole
                 'data' => null,
                 'code' => 401,
             ], 401);
+        }
+
+        if (empty($roles)) {
+            return $next($request);
         }
 
         if (! in_array($user->role, $roles, true)) {

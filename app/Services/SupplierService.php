@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Supplier;
+
+class SupplierService
+{
+    public function getAllSuppliers(?string $search = null)
+    {
+        $query = Supplier::query();
+
+        if ($search) {
+            $query->where('nama_supplier', 'like', "%{$search}%")
+                  ->orWhere('alamat', 'like', "%{$search}%");
+        }
+
+        return $query->get();
+    }
+
+    public function createSupplier(array $data): Supplier
+    {
+        return Supplier::create($data);
+    }
+
+    public function updateSupplier(int $id, array $data): Supplier
+    {
+        $supplier = Supplier::findOrFail($id);
+        $supplier->update($data);
+        return $supplier;
+    }
+}

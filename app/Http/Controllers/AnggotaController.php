@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ActivateAnggotaRequest;
 use App\Models\Anggota;
+use App\Models\Simpanan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class AnggotaController extends Controller
@@ -29,7 +32,7 @@ class AnggotaController extends Controller
             'no_hp'         => 'required|max:15',
             'email'         => 'required|email|unique:anggotas,email',
             'id_cabang'     => 'required|exists:cabangs,id_cabang',
-            'status'        => 'required|in:Aktif,Nonaktif',
+            'status'        => 'sometimes|in:Calon,Aktif',
         ]);
 
         if ($validator->fails()) {
@@ -42,6 +45,7 @@ class AnggotaController extends Controller
         // Karena timestamps = false, pastikan tanggal_daftar terisi manual
         $data = $request->all();
         $data['tanggal_daftar'] = $request->tanggal_daftar ?? now()->format('Y-m-d');
+        $data['status'] = $data['status'] ?? 'Calon';
 
         $anggota = Anggota::create($data);
 
@@ -83,5 +87,60 @@ class AnggotaController extends Controller
             'message' => 'Data anggota berhasil diupdate',
             'data'    => $anggota
         ]);
+    }
+
+    /**
+     * Aktivasi calon anggota (Admin only).
+     * - status: Calon -> Aktif
+     * - generate nomor_anggota
+     * - trigger simpanan pokok pertama
+     */
+    public function activate(ActivateAnggotaRequest $request, int $id_anggota)
+    {
+        $anggota = Anggota::with(['account', 'cabang'])->find($id_anggota);
+        if (! $anggota) {
+            return response()->json(['success' => false, 'message' => 'Anggota tidak ditemukan'], 404);
+        }
+
+        if ($anggota->status !== 'Calon') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya anggota berstatus Calon yang bisa diaktifkan.',
+                'data' => $anggota,
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($request, $anggota) {
+            // Format nomor anggota: AGT-{ID_CABANG}-{ID_ANGGOTA_PAD}
+            $nomor = 'AGT-'.(int) $anggota->id_cabang.'-'.str_pad((string) $anggota->id_anggota, 6, '0', STR_PAD_LEFT);
+
+            // Safety: kalau sudah pernah kebentuk (harusnya belum), pastiin unique
+            if (Anggota::where('nomor_anggota', $nomor)->where('id_anggota', '!=', $anggota->id_anggota)->exists()) {
+                $nomor = $nomor.'-'.now()->format('His');
+            }
+
+            $anggota->nomor_anggota = $nomor;
+            $anggota->status = 'Aktif';
+            $anggota->tanggal_daftar = $anggota->tanggal_daftar ?? now()->toDateString();
+            $anggota->save();
+
+            // Trigger simpanan pokok pertama
+            $validated = $request->validated();
+            $simpanan = Simpanan::create([
+                'id_anggota' => $anggota->id_anggota,
+                'jenis_simpanan' => 'Pokok',
+                'jumlah' => (float) $validated['simpanan_pokok'],
+                'tanggal' => $validated['tanggal'] ?? now()->toDateString(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Anggota berhasil diaktifkan dan simpanan pokok tercatat.',
+                'data' => [
+                    'anggota' => $anggota->fresh(),
+                    'simpanan_pokok' => $simpanan,
+                ],
+            ], 200);
+        });
     }
 }
