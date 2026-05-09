@@ -41,6 +41,7 @@ class UsulanStokController extends Controller
             'id_gudang'      => $petugas->id_gudang,
             'id_supplier'    => $request->id_supplier,
             'id_cabang'      => $petugas->id_cabang, // Otomatis ambil cabang petugas
+            'id_pengurus_acc'=> null, // Baru diisi saat pengurus melakukan ACC
             'jumlah'         => $request->jumlah,
             'harga_beli'     => $request->harga_beli,
             'status'         => 'Pending',

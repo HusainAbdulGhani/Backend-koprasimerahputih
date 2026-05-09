@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Angsuran;
 use App\Models\Pinjaman;
+use App\Models\Simpanan;
+use App\Services\JurnalService;
 use Illuminate\Http\Request;
 use App\Traits\ApiResponse;
 use Illuminate\Support\Facades\DB;
@@ -40,32 +42,84 @@ class AngsuranController extends Controller
     public function verify($id_angsuran)
     {
         return DB::transaction(function () use ($id_angsuran) {
-            $angsuran = Angsuran::findOrFail($id_angsuran);
+            $angsuran = Angsuran::lockForUpdate()->findOrFail($id_angsuran);
             
             if ($angsuran->status !== 'Pending') {
                 return $this->errorResponse('Pembayaran ini sudah diproses.', 400);
             }
 
-            $pinjaman = Pinjaman::findOrFail($angsuran->id_pinjaman);
+            $pinjaman = Pinjaman::lockForUpdate()->findOrFail($angsuran->id_pinjaman);
 
             $lastVerified = Angsuran::where('id_pinjaman', $pinjaman->id_pinjaman)
                 ->where('status', 'Verified')
                 ->orderBy('id_angsuran', 'desc')
                 ->first();
 
-            $saldoSaatIni = $lastVerified ? $lastVerified->sisa_pinjaman : $pinjaman->jumlah_pinjaman;
-            $sisaBaru = $saldoSaatIni - $angsuran->jumlah_bayar;
+            $saldoSaatIni = (float) ($lastVerified ? $lastVerified->sisa_pinjaman : $pinjaman->jumlah_pinjaman);
+            $jumlahBayar = (float) $angsuran->jumlah_bayar;
+
+            // Biaya operasional sesuai dokumen: 2% dari total pinjaman.
+            $totalFee = round(((float) $pinjaman->jumlah_pinjaman) * 0.02, 2);
+            $feeSudahDibayar = (float) Angsuran::where('id_pinjaman', $pinjaman->id_pinjaman)
+                ->where('status', 'Verified')
+                ->sum('fee_bayar');
+            $feeSisa = max(0.0, $totalFee - $feeSudahDibayar);
+
+            $totalKewajiban = $saldoSaatIni + $feeSisa;
+            $alokasiKePinjaman = min($jumlahBayar, $totalKewajiban);
+            $kelebihanBayar = max(0.0, $jumlahBayar - $totalKewajiban);
+
+            $feeBayar = min($feeSisa, $alokasiKePinjaman);
+            $pokokBayar = $alokasiKePinjaman - $feeBayar;
+            $sisaBaru = max(0.0, $saldoSaatIni - $pokokBayar);
 
             $angsuran->update([
                 'status' => 'Verified',
-                'sisa_pinjaman' => $sisaBaru
+                'pokok_bayar' => $pokokBayar,
+                'fee_bayar' => $feeBayar,
+                'sisa_pinjaman' => $sisaBaru,
             ]);
 
-            if ($sisaBaru <= 0) {
-                $pinjaman->update(['status' => 'Lunas']);
+            // Samakan nilai biaya operasional pinjaman dengan 2% pokok pinjaman.
+            if ((float) ($pinjaman->biaya_operasional ?? 0) !== $totalFee) {
+                $pinjaman->biaya_operasional = $totalFee;
+                $pinjaman->save();
             }
 
-            return $this->successResponse('Pembayaran berhasil diverifikasi.');
+            if ($sisaBaru <= 0) {
+                // Status "Lunas" tidak ada di enum pinjamans saat ini.
+                // Biarkan status Approved, pelunasan dibaca dari sisa_pinjaman=0.
+            }
+
+            // Catat jurnal angsuran untuk nominal yang benar-benar dialokasikan.
+            /** @var JurnalService $jurnal */
+            $jurnal = app(JurnalService::class);
+            if ($pokokBayar > 0) {
+                $jurnal->catatAngsuranMasukNominal($angsuran, $pokokBayar);
+            }
+            if ($feeBayar > 0) {
+                $jurnal->catatBiayaOperasionalAngsuran($angsuran, $feeBayar);
+            }
+
+            $simpananSukarela = null;
+            if ($kelebihanBayar > 0) {
+                // Kelebihan pembayaran otomatis jadi Simpanan Sukarela anggota.
+                $simpananSukarela = Simpanan::create([
+                    'id_anggota' => $pinjaman->id_anggota,
+                    'jenis_simpanan' => 'Sukarela',
+                    'jumlah' => $kelebihanBayar,
+                    'tanggal' => now()->toDateString(),
+                ]);
+            }
+
+            return $this->successResponse('Pembayaran berhasil diverifikasi.', [
+                'id_angsuran' => $angsuran->id_angsuran,
+                'alokasi_pokok' => (float) $pokokBayar,
+                'alokasi_fee' => (float) $feeBayar,
+                'kelebihan_masuk_simpanan_sukarela' => (float) $kelebihanBayar,
+                'sisa_pinjaman' => (float) $sisaBaru,
+                'simpanan_sukarela' => $simpananSukarela,
+            ]);
         });
     }
 

@@ -197,9 +197,11 @@ class DatabaseSeeder extends Seeder
                 'id_gudang' => $gudang->id_gudang,
                 'id_pengurus_acc' => $pengurus->id_pengurus,
                 'id_supplier' => $supplier->id_supplier,
+                'id_cabang' => $cabang->id_cabang,
             ],
             [
                 'jumlah' => 200,
+                'harga_beli' => (float) $produkMinyak->harga_beli,
                 'status' => 'Pending',
                 'tanggal_usulan' => now()->toDateString(),
             ]
