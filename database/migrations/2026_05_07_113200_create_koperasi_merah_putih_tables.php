@@ -81,7 +81,7 @@ return new class extends Migration
         Schema::create('pinjamans', function (Blueprint $table) {
             $table->id('id_pinjaman');
             $table->unsignedBigInteger('id_anggota');
-            $table->unsignedBigInteger('id_pengurus_acc');
+            $table->unsignedBigInteger('id_pengurus_acc')->nullable();
             $table->double('jumlah_pinjaman');
             $table->double('biaya_operasional')->default(0);
             $table->enum('tenor', ['6', '12', '18', '24']);
@@ -123,7 +123,7 @@ return new class extends Migration
             $table->unsignedBigInteger('id_cabang');
             $table->unsignedBigInteger('id_produk');
             $table->unsignedBigInteger('id_gudang');
-            $table->unsignedBigInteger('id_pengurus_acc');
+            $table->unsignedBigInteger('id_pengurus_acc')->nullable();
             $table->unsignedBigInteger('id_supplier');
             $table->integer('jumlah');
             $table->enum('status', ['Pending', 'ACC'])->default('Pending');

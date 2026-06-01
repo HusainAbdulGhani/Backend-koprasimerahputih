@@ -438,6 +438,76 @@
               ]
             }
           }
+        },
+        {
+          "name": "Input Simpanan (Kasir/Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_kasir}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_anggota\": {{id_anggota}},\n  \"jenis_simpanan\": \"Wajib\",\n  \"jumlah\": 100000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/simpanans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "simpanans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Simpanan (Kasir/Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_kasir}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/simpanans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "simpanans"
+              ]
+            }
+          }
         }
       ]
     },
@@ -446,6 +516,24 @@
       "item": [
         {
           "name": "Ajukan Pinjaman (Anggota)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 or 200', function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const idPinjaman = json?.data?.id_pinjaman;",
+                  "if (idPinjaman) {",
+                  "  pm.environment.set('id_pinjaman', String(idPinjaman));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
@@ -479,6 +567,75 @@
               ],
               "path": [
                 "pinjamans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Angsuran (Anggota)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200/201', function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const idAngsuran = json?.data?.id_angsuran;",
+                  "if (idAngsuran) {",
+                  "  pm.environment.set('id_angsuran', String(idAngsuran));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_anggota}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id_pinjaman",
+                  "value": "{{id_pinjaman}}",
+                  "type": "text"
+                },
+                {
+                  "key": "jumlah_bayar",
+                  "value": "500000",
+                  "type": "text"
+                },
+                {
+                  "key": "bukti_transfer",
+                  "type": "file",
+                  "src": "{{bukti_transfer_path}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/angsurans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "angsurans"
               ]
             }
           }
@@ -537,6 +694,102 @@
                 "pinjamans",
                 "{{id_pinjaman}}",
                 "approve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "My History (Anggota)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_anggota}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/my-history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "my-history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check Sisa Pinjaman (Anggota)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_anggota}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/my-loan-remaining/{{id_pinjaman}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "my-loan-remaining",
+                "{{id_pinjaman}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Status Pinjaman by ID (Pengurus/Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_pengurus}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pinjamans/{{id_pinjaman}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pinjamans",
+                "{{id_pinjaman}}",
+                "status"
               ]
             }
           }
@@ -626,6 +879,24 @@
         },
         {
           "name": "Create Usulan Stok (Gudang)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201/200', function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const idUsulan = json?.data?.id_usulan;",
+                  "if (idUsulan) {",
+                  "  pm.environment.set('id_usulan', String(idUsulan));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
@@ -659,6 +930,70 @@
               ],
               "path": [
                 "usulan-stoks"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Usulan Stok (Gudang)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_gudang}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usulan-stoks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "usulan-stoks"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Usulan Stok (Pengurus)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_pengurus}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usulan-stoks/{{id_usulan}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "usulan-stoks",
+                "{{id_usulan}}",
+                "approve"
               ]
             }
           }
