@@ -78,9 +78,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/produks/list', [ProdukController::class, 'index']);
     });
 
+    // --- GUDANG, PENGURUS, ADMIN: produk management ---
+    Route::middleware('role:Gudang,Pengurus,Admin')->group(function () {
+        Route::apiResource('produks', ProdukController::class)->except(['index']);
+    });
+
     // --- GUDANG: stok gudang & usulan pembelian ---
     Route::middleware('role:Gudang,Admin')->group(function () {
-        Route::apiResource('produks', ProdukController::class)->except(['index']);
         Route::apiResource('suppliers', SupplierController::class);
         Route::post('/usulan-stoks', [UsulanStokController::class, 'store']);
         Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
