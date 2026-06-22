@@ -28,6 +28,9 @@ return [
 
     'pinjaman_limit_multiplier_simpanan' => 3,
 
+    // Nominal setoran wajib anggota per bulan. Diubah dari sini bila kebijakan koperasi berubah.
+    'simpanan_wajib_bulanan' => 100000,
+
     'stok_warning_threshold' => 100,
 
     'kasir_per_cabang' => 2,
