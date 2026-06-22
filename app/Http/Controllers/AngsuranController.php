@@ -21,7 +21,7 @@ class AngsuranController extends Controller
         $request->validate([
             'id_pinjaman' => 'required|exists:pinjamans,id_pinjaman',
             'jumlah_bayar' => 'required|numeric',
-            'bukti_transfer' => 'required|image|mimes:jpg,png,jpeg|max:2048',
+            'bukti_transfer' => 'required|file|mimes:jpg,png,jpeg,pdf|max:2048',
         ]);
 
         $path = $request->file('bukti_transfer')->store('bukti_pembayaran', 'public');
