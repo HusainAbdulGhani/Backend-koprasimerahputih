@@ -57,7 +57,7 @@ class GoogleAuthController extends Controller
                     'email' => $email,
                     'id_cabang' => $idCabang,
                     'tanggal_daftar' => now()->toDateString(),
-                    'status' => 'Calon',
+                    'status' => 'Tertunda',
                 ]);
             }
 

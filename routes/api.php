@@ -40,6 +40,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard monitoring (Pengurus & Admin)
     Route::middleware('role:Pengurus,Admin')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
+        Route::patch('/members/{id}/approve', [AnggotaController::class, 'approve']);
+        Route::patch('/members/{id}/reject', [AnggotaController::class, 'reject']);
+        Route::post('/members/bulk-delete', [AnggotaController::class, 'bulkDelete']);
     });
 
     // --- ADMIN ONLY: Manajemen Anggota & Pengguna ---

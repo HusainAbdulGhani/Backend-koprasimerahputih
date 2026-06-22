@@ -17,6 +17,8 @@ class UserDirectoryService
 {
     private const STATUS_LABEL = [
         'Calon' => 'Tertunda',
+        'Tertunda' => 'Tertunda',
+        'Ditolak' => 'Ditolak',
         'Aktif' => 'Aktif',
         'Non-Aktif' => 'Tidak Aktif',
     ];
@@ -80,7 +82,7 @@ class UserDirectoryService
                     'role' => 'Anggota',
                 ]);
 
-                $status = $data['status'] ?? 'Calon';
+                $status = $data['status'] ?? 'Aktif';
                 $anggota = Anggota::create([
                     'id_account' => $account->id_account,
                     'nama_anggota' => $data['nama'],
@@ -350,6 +352,7 @@ class UserDirectoryService
     {
         return match ($status) {
             'Tertunda', 'Calon' => 'Tertunda',
+            'Ditolak' => 'Ditolak',
             'Tidak Aktif', 'Non-Aktif' => 'Tidak Aktif',
             default => 'Aktif',
         };
@@ -358,7 +361,8 @@ class UserDirectoryService
     private function normalizeStatusInput(string $status): string
     {
         return match ($status) {
-            'Tertunda' => 'Calon',
+            'Tertunda' => 'Tertunda',
+            'Ditolak' => 'Ditolak',
             'Tidak Aktif' => 'Non-Aktif',
             default => $status,
         };
