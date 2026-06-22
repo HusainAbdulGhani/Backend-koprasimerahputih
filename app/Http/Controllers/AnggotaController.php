@@ -33,6 +33,7 @@ class AnggotaController extends Controller
                 'username' => $validated['username'],
                 'password' => $validated['password'],
                 'role' => 'Anggota',
+                'email' => $validated['email'],
             ]);
 
             $anggota = Anggota::create([
@@ -112,6 +113,20 @@ class AnggotaController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // Penyelarasan field dari frontend ke backend validation
+        if (! $request->has('alamat') && $request->has('nama_cabang')) {
+            $request->merge(['alamat' => $request->input('nama_cabang')]);
+        }
+
+        if (! $request->has('id_cabang')) {
+            $firstCabang = \App\Models\Cabang::value('id_cabang') ?? 1;
+            $request->merge(['id_cabang' => $firstCabang]);
+        }
+
+        if (! $request->has('telepon') && $request->has('no_hp')) {
+            $request->merge(['telepon' => $request->input('no_hp')]);
+        }
+
         $validated = $request->validate([
             'nama' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:anggotas,email',

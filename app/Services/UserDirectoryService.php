@@ -39,6 +39,7 @@ class UserDirectoryService
                 'username' => $data['username'],
                 'password' => $data['password'],
                 'role' => $role,
+                'email' => $data['email'] ?? null,
             ]);
 
             $profile = match ($role) {
@@ -80,6 +81,7 @@ class UserDirectoryService
                     'username' => $data['username'],
                     'password' => $data['password'],
                     'role' => 'Anggota',
+                    'email' => $data['email'] ?? null,
                 ]);
 
                 $status = $data['status'] ?? 'Aktif';
@@ -107,6 +109,7 @@ class UserDirectoryService
                     'username' => $data['username'],
                     'password' => $data['password'],
                     'role' => 'Admin',
+                    'email' => $data['email'] ?? null,
                 ]);
 
                 $admin = Admin::create([
@@ -147,7 +150,19 @@ class UserDirectoryService
             $members = $members->where('status_label', $this->normalizeStatusFilter($filters['status']));
         }
 
-        $members = $members->sortBy('nama')->values();
+        $members = $members->sort(function ($a, $b) {
+            $aPending = in_array($a['status'], ['Tertunda', 'Calon'], true);
+            $bPending = in_array($b['status'], ['Tertunda', 'Calon'], true);
+
+            if ($aPending && !$bPending) {
+                return -1;
+            }
+            if (!$aPending && $bPending) {
+                return 1;
+            }
+
+            return strcasecmp($a['nama'], $b['nama']);
+        })->values();
         $page = max(1, (int) ($filters['page'] ?? 1));
         $total = $members->count();
         $items = $members->slice(($page - 1) * $perPage, $perPage)->values();
@@ -171,6 +186,11 @@ class UserDirectoryService
         return DB::transaction(function () use ($account, $data) {
             if (! empty($data['password'])) {
                 $account->password = $data['password'];
+            }
+            if (! empty($data['email'])) {
+                $account->email = $data['email'];
+            }
+            if ($account->isDirty()) {
                 $account->save();
             }
 
@@ -220,7 +240,7 @@ class UserDirectoryService
                 idAccount: $account->id_account,
                 idProfile: $account->admin->id_admin,
                 nama: $account->admin->nama_admin,
-                email: $account->username.'@koperasi.id',
+                email: $account->email ?? ($account->username.'@koperasi.id'),
                 username: $account->username,
                 peran: 'Admin',
                 status: 'Aktif',
@@ -235,7 +255,7 @@ class UserDirectoryService
                 idAccount: $account->id_account,
                 idProfile: $p->id_pengurus,
                 nama: $p->nama_pengurus,
-                email: $account->username.'@koperasi.id',
+                email: $account->email ?? ($account->username.'@koperasi.id'),
                 username: $account->username,
                 peran: 'Pengurus',
                 status: 'Aktif',
@@ -252,7 +272,7 @@ class UserDirectoryService
                 idAccount: $account->id_account,
                 idProfile: $k->id_kasir,
                 nama: $k->nama_kasir,
-                email: $account->username.'@koperasi.id',
+                email: $account->email ?? ($account->username.'@koperasi.id'),
                 username: $account->username,
                 peran: 'Kasir',
                 status: 'Aktif',
@@ -269,7 +289,7 @@ class UserDirectoryService
                 idAccount: $account->id_account,
                 idProfile: $g->id_gudang,
                 nama: $g->nama_petugas,
-                email: $account->username.'@koperasi.id',
+                email: $account->email ?? ($account->username.'@koperasi.id'),
                 username: $account->username,
                 peran: 'Gudang',
                 status: 'Aktif',
@@ -293,6 +313,7 @@ class UserDirectoryService
                 telepon: $a->no_hp,
                 idCabang: $a->id_cabang,
                 namaCabang: $a->cabang?->nama_cabang,
+                alamat: $a->alamat,
             );
         }
 
@@ -300,7 +321,7 @@ class UserDirectoryService
             idAccount: $account->id_account,
             idProfile: null,
             nama: $account->username,
-            email: $account->username.'@koperasi.id',
+            email: $account->email ?? ($account->username.'@koperasi.id'),
             username: $account->username,
             peran: $account->role,
             status: 'Aktif',
@@ -326,6 +347,7 @@ class UserDirectoryService
         string $telepon,
         ?int $idCabang = null,
         ?string $namaCabang = null,
+        ?string $alamat = null,
     ): array {
         $words = preg_split('/\s+/', trim($nama)) ?: [];
         $inicial = collect($words)->take(2)->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))->implode('');
@@ -344,6 +366,7 @@ class UserDirectoryService
             'telepon' => $telepon,
             'id_cabang' => $idCabang,
             'nama_cabang' => $namaCabang,
+            'alamat' => $alamat,
             'inicial' => $inicial ?: mb_strtoupper(mb_substr($nama, 0, 2)),
         ];
     }
