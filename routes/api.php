@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\CabangController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\PortalAnggotaController;
+use App\Http\Controllers\GoogleAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/anggota/register', [AnggotaController::class, 'register']);
 Route::get('/cabangs', [CabangController::class, 'index']);
+Route::get('/auth/google', [GoogleAuthController::class, 'redirectToGoogle']);
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
 
 // --- PROTECTED ---
 Route::middleware('auth:sanctum')->group(function () {
@@ -33,10 +36,15 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/simpanans', [SimpananController::class, 'store'])
+        ->middleware('role:Anggota,Pengurus,Admin');
 
     // Dashboard monitoring (Pengurus & Admin)
     Route::middleware('role:Pengurus,Admin')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
+        Route::patch('/members/{id}/approve', [AnggotaController::class, 'approve']);
+        Route::patch('/members/{id}/reject', [AnggotaController::class, 'reject']);
+        Route::post('/members/bulk-delete', [AnggotaController::class, 'bulkDelete']);
     });
 
     // --- ADMIN ONLY: Manajemen Anggota & Pengguna ---
@@ -58,8 +66,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:Anggota')->group(function () {
         Route::get('/portal', [PortalAnggotaController::class, 'dashboard']);
         Route::get('/portal/transaksi', [PortalAnggotaController::class, 'riwayatTransaksi']);
-        Route::get('/me', [AnggotaController::class, 'me']);
+        Route::get('/portal/me', [AnggotaController::class, 'me']);
         Route::get('/simpanans', [SimpananController::class, 'index']);
+        Route::get('/simpanans/rules', [SimpananController::class, 'rules']);
         Route::post('/pinjamans', [PinjamanController::class, 'store']);
         Route::get('/pinjamans', [PinjamanController::class, 'index']);
         Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
@@ -75,9 +84,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/produks/list', [ProdukController::class, 'index']);
     });
 
+    // --- GUDANG, PENGURUS, ADMIN: produk management ---
+    Route::middleware('role:Gudang,Pengurus,Admin')->group(function () {
+        Route::apiResource('produks', ProdukController::class)->except(['index']);
+    });
+
     // --- GUDANG: stok gudang & usulan pembelian ---
     Route::middleware('role:Gudang,Admin')->group(function () {
-        Route::apiResource('produks', ProdukController::class)->except(['index']);
         Route::apiResource('suppliers', SupplierController::class);
         Route::post('/usulan-stoks', [UsulanStokController::class, 'store']);
         Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
@@ -97,10 +110,14 @@ Route::middleware('auth:sanctum')->group(function () {
         // Simpan pinjam
         Route::get('/pinjamans/manage', [PinjamanController::class, 'index']);
         Route::patch('/pinjamans/{id_pinjaman}/approve', [PinjamanController::class, 'approve']);
+        Route::patch('/pinjamans/{id_pinjaman}/reject', [PinjamanController::class, 'reject']);
         Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
+        Route::get('/angsurans/manage', [AngsuranController::class, 'history']);
         Route::patch('/angsurans/{id_angsuran}/verify', [AngsuranController::class, 'verify']);
+        Route::patch('/angsurans/{id_angsuran}/reject', [AngsuranController::class, 'reject']);
         Route::get('/simpanans/manage', [SimpananController::class, 'index']);
-        Route::post('/simpanans', [SimpananController::class, 'store']);
+        Route::patch('/simpanans/{id_simpanan}/verify', [SimpananController::class, 'verify']);
+        Route::patch('/simpanans/{id_simpanan}/reject', [SimpananController::class, 'reject']);
         Route::get('/simpanans/saldo/{id_anggota}', [SimpananController::class, 'cekSaldo']);
 
         // Persetujuan usulan stok & monitoring stok

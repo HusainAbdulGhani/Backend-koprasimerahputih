@@ -27,7 +27,7 @@ class DashboardController extends Controller
             $threshold = (int) config('koperasi.stok_warning_threshold', 100);
 
             $anggotaQuery = Anggota::query();
-            $simpananQuery = Simpanan::query();
+            $simpananQuery = Simpanan::query()->where('status', 'Verified');
             $produkQuery = Produk::query();
             $pinjamanQuery = Pinjaman::query();
             $usulanQuery = UsulanStok::query();
@@ -74,6 +74,7 @@ class DashboardController extends Controller
                 'total_anggota' => $anggotaQuery->count(),
                 'kas_koperasi' => $saldoKas,
                 'total_simpanan' => (float) $simpananQuery->sum('jumlah'),
+                'total_pinjaman' => (float) (clone $pinjamanQuery)->where('status', 'Approved')->sum('jumlah_pinjaman'),
                 'piutang_berjalan' => $piutangBerjalan,
                 'aset_produk' => (float) $produkQuery->selectRaw('SUM(harga_beli * stok) as total')->value('total') ?? 0,
             ];
