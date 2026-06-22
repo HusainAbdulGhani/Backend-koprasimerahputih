@@ -26,6 +26,8 @@ return [
 
     'biaya_operasional_persen' => 0.02,
 
+    'pinjaman_limit_multiplier_simpanan' => 3,
+
     'stok_warning_threshold' => 100,
 
     'kasir_per_cabang' => 2,

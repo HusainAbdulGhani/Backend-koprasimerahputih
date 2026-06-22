@@ -107,8 +107,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Simpan pinjam
         Route::get('/pinjamans/manage', [PinjamanController::class, 'index']);
         Route::patch('/pinjamans/{id_pinjaman}/approve', [PinjamanController::class, 'approve']);
+        Route::patch('/pinjamans/{id_pinjaman}/reject', [PinjamanController::class, 'reject']);
         Route::get('/pinjamans/{id_pinjaman}/status', [PinjamanController::class, 'showStatus']);
+        Route::get('/angsurans/manage', [AngsuranController::class, 'history']);
         Route::patch('/angsurans/{id_angsuran}/verify', [AngsuranController::class, 'verify']);
+        Route::patch('/angsurans/{id_angsuran}/reject', [AngsuranController::class, 'reject']);
         Route::get('/simpanans/manage', [SimpananController::class, 'index']);
         Route::post('/simpanans', [SimpananController::class, 'store']);
         Route::get('/simpanans/saldo/{id_anggota}', [SimpananController::class, 'cekSaldo']);
