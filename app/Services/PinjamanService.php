@@ -42,14 +42,23 @@ class PinjamanService
             ->where('status', 'Approved')
             ->get();
 
-        $totalSisaPinjaman = $activeLoans->sum(function (Pinjaman $pinjaman) {
+        $hasActiveLoan = false;
+        $totalSisaPinjaman = $activeLoans->sum(function (Pinjaman $pinjaman) use (&$hasActiveLoan) {
             $lastVerified = Angsuran::where('id_pinjaman', $pinjaman->id_pinjaman)
                 ->where('status', 'Verified')
                 ->orderByDesc('id_angsuran')
                 ->first();
 
-            return (float) ($lastVerified ? $lastVerified->sisa_pinjaman : $pinjaman->jumlah_pinjaman);
+            $sisa = (float) ($lastVerified ? $lastVerified->sisa_pinjaman : $pinjaman->jumlah_pinjaman);
+            if ($sisa > 0) {
+                $hasActiveLoan = true;
+            }
+            return $sisa;
         });
+
+        if ($hasActiveLoan) {
+            throw new RuntimeException('Anda masih memiliki pinjaman berjalan yang belum lunas. Silakan lunasi pinjaman sebelumnya terlebih dahulu.');
+        }
 
         $limitMultiplier = (float) config('koperasi.pinjaman_limit_multiplier_simpanan', 3);
         $limitPinjaman = max(0.0, ($totalSimpanan * $limitMultiplier) - $totalSisaPinjaman);
