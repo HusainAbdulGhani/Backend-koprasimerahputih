@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Anggota;
 use App\Models\Angsuran;
-use App\Models\DetailJurnal;
 use App\Models\Pinjaman;
 use App\Models\Produk;
 use App\Models\Simpanan;
@@ -14,7 +13,6 @@ use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -44,60 +42,29 @@ class DashboardController extends Controller
                 $angsuranQuery->whereHas('pinjaman.anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
             }
 
-            $kasQuery = DetailJurnal::whereHas('akun', fn ($q) => $q->where('nama_akun', 'like', '%Kas%'));
-            if ($cabangScope !== null) {
-                $kasQuery->whereHas('jurnal', fn ($q) => $q->where('id_cabang', $cabangScope));
-            }
-            $saldoKas = (float) ($kasQuery->selectRaw('SUM(debit) - SUM(kredit) as total')->value('total') ?? 0);
-
-            $lastVerifiedSub = Angsuran::selectRaw('id_pinjaman, MAX(id_angsuran) as last_id')
-                ->where('status', 'Verified')
-                ->groupBy('id_pinjaman');
-
-            $piutangQuery = Pinjaman::query()
-                ->where('pinjamans.status', 'Approved')
-                ->leftJoinSub($lastVerifiedSub, 'lv', function ($join) {
-                    $join->on('pinjamans.id_pinjaman', '=', 'lv.id_pinjaman');
-                })
-                ->leftJoin('angsurans as a', 'a.id_angsuran', '=', 'lv.last_id');
-
-            if ($cabangScope !== null) {
-                $piutangQuery->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
-            }
-
-            $piutangBerjalan = (float) ($piutangQuery
-                ->selectRaw('SUM(COALESCE(a.sisa_pinjaman, pinjamans.jumlah_pinjaman)) as total')
-                ->value('total') ?? 0);
-
             $stats = [
                 'id_cabang' => $cabangScope,
                 'total_anggota' => $anggotaQuery->count(),
-                'kas_koperasi' => $saldoKas,
+                'anggota_aktif' => (clone $anggotaQuery)->where('status', 'Aktif')->count(),
                 'total_simpanan' => (float) $simpananQuery->sum('jumlah'),
-                'total_pinjaman' => (float) (clone $pinjamanQuery)->where('status', 'Approved')->sum('jumlah_pinjaman'),
-                'piutang_berjalan' => $piutangBerjalan,
-                'aset_produk' => (float) $produkQuery->selectRaw('SUM(harga_beli * stok) as total')->value('total') ?? 0,
-            ];
-
-            $performance = [
-                'angsuran_masuk_bulan_ini' => (float) (clone $angsuranQuery)
-                    ->whereMonth('tanggal_bayar', now()->month)
-                    ->whereYear('tanggal_bayar', now()->year)
-                    ->where('status', 'Verified')
-                    ->sum('jumlah_bayar'),
-                'pinjaman_keluar_bulan_ini' => (float) (clone $pinjamanQuery)
-                    ->whereMonth('tanggal_pengajuan', now()->month)
-                    ->whereYear('tanggal_pengajuan', now()->year)
-                    ->where('status', 'Approved')
-                    ->sum('jumlah_pinjaman'),
             ];
 
             $alerts = [
                 'stok_kritis' => (clone $produkQuery)
+                    ->with('supplier:id_supplier,nama_supplier')
                     ->where('stok', '<', $threshold)
                     ->orderBy('stok', 'asc')
                     ->take(10)
-                    ->get(['nama_produk', 'stok']),
+                    ->get(['id_produk', 'id_supplier', 'nama_produk', 'stok'])
+                    ->map(fn (Produk $produk) => [
+                        'id_produk' => $produk->id_produk,
+                        'nama_produk' => $produk->nama_produk,
+                        'stok' => (int) $produk->stok,
+                        'nama_supplier' => $produk->supplier?->nama_supplier,
+                    ]),
+                // Daftar dibatasi agar payload ringan, tetapi total harus memakai
+                // seluruh produk kritis supaya sama dengan modul inventaris.
+                'total_stok_kritis' => (clone $produkQuery)->where('stok', '<', $threshold)->count(),
                 'total_produk' => (clone $produkQuery)->count(),
                 'threshold' => $threshold,
             ];
@@ -109,26 +76,53 @@ class DashboardController extends Controller
                 'calon_anggota' => (clone $anggotaQuery)->where('status', 'Calon')->count(),
             ];
 
-            $chartSimpanan = (clone $simpananQuery)
-                ->selectRaw("DATE_FORMAT(tanggal, '%M') as bulan, SUM(jumlah) as total")
-                ->groupBy('bulan')
-                ->orderBy(DB::raw('MIN(tanggal)'), 'asc')
-                ->take(6)
-                ->get();
-
-            $recentActivities = (clone $pinjamanQuery)
-                ->with('anggota')
-                ->orderByDesc('tanggal_pengajuan')
+            $recentActivities = collect()
+                ->merge((clone $pinjamanQuery)->with('anggota')->orderByDesc('tanggal_pengajuan')->take(5)->get()->map(fn (Pinjaman $item) => [
+                    'id' => 'pinjaman-'.$item->id_pinjaman,
+                    'type' => 'keuangan',
+                    'user' => $item->anggota?->nama_anggota ?? 'Anggota',
+                    'role' => 'Anggota',
+                    'action' => 'Mengajukan pinjaman',
+                    'amount' => (float) $item->jumlah_pinjaman,
+                    'date' => $item->tanggal_pengajuan?->toDateString(),
+                ]))
+                ->merge((clone $simpananQuery)->with('anggota')->orderByDesc('tanggal')->take(5)->get()->map(fn (Simpanan $item) => [
+                    'id' => 'simpanan-'.$item->id_simpanan,
+                    'type' => 'keuangan',
+                    'user' => $item->anggota?->nama_anggota ?? 'Anggota',
+                    'role' => 'Anggota',
+                    'action' => 'Setoran simpanan '.$item->jenis_simpanan,
+                    'amount' => (float) $item->jumlah,
+                    'date' => $item->tanggal?->toDateString(),
+                ]))
+                ->merge((clone $angsuranQuery)->with('pinjaman.anggota')->where('status', 'Verified')->orderByDesc('tanggal_bayar')->take(5)->get()->map(fn (Angsuran $item) => [
+                    'id' => 'angsuran-'.$item->id_angsuran,
+                    'type' => 'keuangan',
+                    'user' => $item->pinjaman?->anggota?->nama_anggota ?? 'Anggota',
+                    'role' => 'Anggota',
+                    'action' => 'Membayar angsuran pinjaman',
+                    'amount' => (float) $item->jumlah_bayar,
+                    'date' => $item->tanggal_bayar?->toDateString(),
+                ]))
+                ->merge((clone $usulanQuery)->with(['gudang', 'produk'])->orderByDesc('tanggal_usulan')->take(5)->get()->map(fn (UsulanStok $item) => [
+                    'id' => 'usulan-'.$item->id_usulan,
+                    'type' => 'inventaris',
+                    'user' => $item->gudang?->nama_petugas ?? 'Petugas Gudang',
+                    'role' => 'Gudang',
+                    'action' => 'Mengajukan stok '.$item->produk?->nama_produk,
+                    'amount' => (float) $item->jumlah * (float) $item->harga_beli,
+                    'date' => $item->tanggal_usulan?->toDateString(),
+                ]))
+                ->filter(fn (array $item) => filled($item['date']))
+                ->sortByDesc('date')
                 ->take(5)
-                ->get();
+                ->values();
 
             return $this->successResponse('Dashboard data synced successfully.', [
                 'statistics' => $stats,
-                'performance' => $performance,
                 'inventory' => $alerts,
                 'pending_actions' => $pendingTasks,
-                'charts' => $chartSimpanan,
-                'recent_loans' => $recentActivities,
+                'recent_activities' => $recentActivities,
             ]);
         } catch (\Throwable $e) {
             return $this->errorResponse('Gagal memuat dashboard.', $e->getMessage(), 500);
