@@ -20,7 +20,7 @@ class ApproveUsulanRequest extends BaseApiRequest
     {
         return [
             'id_usulan' => ['required', 'integer', 'exists:usulan_stoks,id_usulan'],
-            'harga_jual' => ['required', 'numeric', 'min:0'],
+            'harga_jual' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

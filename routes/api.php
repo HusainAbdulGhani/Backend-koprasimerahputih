@@ -78,23 +78,30 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- KASIR: POS & struk (2 kasir per cabang) ---
-    Route::middleware('role:Kasir')->group(function () {
+    Route::middleware('role:Kasir,Admin')->group(function () {
         Route::post('/checkout', [TransactionController::class, 'checkout']);
         Route::get('/transactions/{id_transaksi}/receipt', [TransactionController::class, 'receipt']);
         Route::get('/produks/list', [ProdukController::class, 'index']);
     });
 
     // --- GUDANG, PENGURUS, ADMIN: produk management ---
-    Route::middleware('role:Gudang,Pengurus,Admin')->group(function () {
-        Route::apiResource('produks', ProdukController::class)->except(['index']);
+    Route::middleware('role:Admin')->group(function () {
+        Route::apiResource('produks', ProdukController::class)
+            ->except(['index'])
+            ->whereNumber('produk');
     });
 
     // --- GUDANG: stok gudang & usulan pembelian ---
-    Route::middleware('role:Gudang,Admin')->group(function () {
-        Route::apiResource('suppliers', SupplierController::class);
-        Route::post('/usulan-stoks', [UsulanStokController::class, 'store']);
-        Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
+    Route::middleware('role:Gudang,Pengurus,Admin')->group(function () {
         Route::get('/produks/stok', [ProdukController::class, 'index']);
+        Route::get('/suppliers', [SupplierController::class, 'index']);
+        Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
+    });
+    Route::middleware('role:Admin')->group(function () {
+        Route::apiResource('suppliers', SupplierController::class)->except(['index']);
+    });
+    Route::middleware('role:Gudang')->group(function () {
+        Route::post('/usulan-stoks', [UsulanStokController::class, 'store']);
     });
 
     // --- PENGURUS: simpan pinjam, approval, laporan, monitoring cabang ---
@@ -122,6 +129,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Persetujuan usulan stok & monitoring stok
         Route::patch('/usulan-stoks/{id_usulan}/approve', [UsulanStokController::class, 'approveUsulan']);
+        Route::patch('/usulan-stoks/{id_usulan}/reject', [UsulanStokController::class, 'rejectUsulan']);
         Route::get('/usulan-stoks/manage', [UsulanStokController::class, 'index']);
         Route::get('/produks/monitor', [ProdukController::class, 'index']);
 

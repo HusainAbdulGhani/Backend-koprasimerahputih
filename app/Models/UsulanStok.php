@@ -12,6 +12,7 @@ class UsulanStok extends Model
 
     protected $fillable = [
         'id_produk',
+        'kode_usulan',
         'id_gudang',
         'id_supplier',
         'id_cabang',
@@ -20,13 +21,19 @@ class UsulanStok extends Model
         'harga_jual',
         'status',
         'id_pengurus_acc', 
-        'tanggal_usulan'
+        'tanggal_usulan',
+        'status_pengiriman',
+        'tanggal_approved',
+        'tanggal_diterima',
+        'alasan_penolakan',
     ];
 
     protected function casts(): array
     {
         return [
             'tanggal_usulan' => 'date',
+            'tanggal_approved' => 'datetime',
+            'tanggal_diterima' => 'datetime',
         ];
     }
 
