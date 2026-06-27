@@ -90,6 +90,8 @@ class PinjamanController extends Controller
         try {
             $pinjaman = $this->pinjamanService->ajukanPinjaman($request->validated());
 
+            broadcast(new \App\Events\LoanUpdated('created', $pinjaman));
+
             return $this->successResponse(
                 'Pengajuan pinjaman berhasil dibuat. Menunggu persetujuan pengurus.',
                 new PinjamanResource($pinjaman),
@@ -143,6 +145,8 @@ class PinjamanController extends Controller
 
             DB::commit();
 
+            broadcast(new \App\Events\LoanUpdated('approved', $pinjaman));
+
             return $this->successResponse(
                 'Pinjaman berhasil di-ACC.',
                 new PinjamanResource($pinjaman->fresh(['anggota', 'pengurusAcc'])),
@@ -188,6 +192,8 @@ class PinjamanController extends Controller
 
             DB::commit();
 
+            broadcast(new \App\Events\LoanUpdated('rejected', $pinjaman));
+
             return $this->successResponse(
                 'Pinjaman berhasil ditolak.',
                 new PinjamanResource($pinjaman->fresh(['anggota', 'pengurusAcc'])),
@@ -229,6 +235,8 @@ class PinjamanController extends Controller
         if (! $pinjaman) {
             return $this->errorResponse('Data pinjaman tidak ditemukan.', null, 404);
         }
+
+        broadcast(new \App\Events\LoanUpdated('deleted', $pinjaman));
 
         $pinjaman->delete();
 
