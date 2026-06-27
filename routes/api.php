@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/checkout', [TransactionController::class, 'checkout']);
         Route::get('/transactions/{id_transaksi}/receipt', [TransactionController::class, 'receipt']);
         Route::get('/produks/list', [ProdukController::class, 'index']);
+        Route::get('/pos/anggota', [TransactionController::class, 'members']);
     });
 
     // --- GUDANG, PENGURUS, ADMIN: produk management ---

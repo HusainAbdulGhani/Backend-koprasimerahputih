@@ -35,16 +35,28 @@ class TransactionService
                 throw new RuntimeException('Items transaksi tidak boleh kosong.');
             }
 
-            foreach ($items as $item) {
-                $produkQuery = Produk::where('id_produk', $item['id_produk']);
+            $requestedItems = collect($items)
+                ->groupBy('id_produk')
+                ->map(fn ($rows, $idProduk) => [
+                    'id_produk' => (int) $idProduk,
+                    'jumlah' => (int) $rows->sum('jumlah'),
+                ])
+                ->values();
 
-                if ($kasir->id_cabang) {
-                    $produkQuery->where(function ($q) use ($kasir) {
-                        $q->where('id_cabang', $kasir->id_cabang)->orWhereNull('id_cabang');
-                    });
-                }
+            $produkQuery = Produk::query()
+                ->select(['id_produk', 'id_cabang', 'nama_produk', 'harga_beli', 'harga_jual', 'stok'])
+                ->whereIn('id_produk', $requestedItems->pluck('id_produk'));
 
-                $produk = $produkQuery->lockForUpdate()->first();
+            if ($kasir->id_cabang) {
+                $produkQuery->where(function ($q) use ($kasir) {
+                    $q->where('id_cabang', $kasir->id_cabang)->orWhereNull('id_cabang');
+                });
+            }
+
+            $produkById = $produkQuery->lockForUpdate()->get()->keyBy('id_produk');
+
+            foreach ($requestedItems as $item) {
+                $produk = $produkById->get($item['id_produk']);
 
                 if (! $produk) {
                     throw new RuntimeException('Produk dengan id '.$item['id_produk'].' tidak ditemukan di cabang ini.');
@@ -76,7 +88,7 @@ class TransactionService
                 ];
             }
 
-            $ppn = isset($data['ppn']) ? (float) $data['ppn'] : 0.0;
+            $ppn = isset($data['ppn']) ? (float) $data['ppn'] : round($subTotal * 0.11);
             $totalBayar = $subTotal + $ppn;
 
             $transaksi = TransaksiPos::create([
