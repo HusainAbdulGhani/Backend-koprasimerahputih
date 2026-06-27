@@ -8,6 +8,7 @@ use App\Models\Anggota;
 use App\Models\Gudang;
 use App\Models\Kasir;
 use App\Models\Pengurus;
+use App\Services\SimpananPolicyService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -99,6 +100,7 @@ class UserDirectoryService
                 if ($status === 'Aktif') {
                     $anggota->nomor_anggota = 'AGT-'.$anggota->id_cabang.'-'.str_pad((string) $anggota->id_anggota, 6, '0', STR_PAD_LEFT);
                     $anggota->save();
+                    app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
                 }
 
                 return ['account' => $account, 'profile' => $anggota];
@@ -472,6 +474,10 @@ class UserDirectoryService
             }
         }
         $a->save();
+
+        if ($a->status === 'Aktif') {
+            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($a);
+        }
 
         return $a->fresh('cabang');
     }

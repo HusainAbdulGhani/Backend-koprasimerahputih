@@ -8,7 +8,7 @@ use App\Http\Requests\UpdateAnggotaRequest;
 use App\Http\Resources\AnggotaResource;
 use App\Models\Account;
 use App\Models\Anggota;
-use App\Models\Simpanan;
+use App\Services\SimpananPolicyService;
 use App\Services\UserDirectoryService;
 use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
@@ -232,6 +232,9 @@ class AnggotaController extends Controller
             }
         }
         $anggota->save();
+        if ($anggota->status === 'Aktif') {
+            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
+        }
         $anggota->load(['account', 'cabang']);
 
         // Format to match expected frontend structure
@@ -301,18 +304,7 @@ class AnggotaController extends Controller
             $anggota->tanggal_daftar = $anggota->tanggal_daftar ?? now()->toDateString();
             $anggota->save();
 
-            $hasSimpanan = Simpanan::where('id_anggota', $anggota->id_anggota)
-                ->where('jenis_simpanan', 'Pokok')
-                ->exists();
-
-            if (!$hasSimpanan) {
-                Simpanan::create([
-                    'id_anggota' => $anggota->id_anggota,
-                    'jenis_simpanan' => 'Pokok',
-                    'jumlah' => 50000.00,
-                    'tanggal' => now()->toDateString(),
-                ]);
-            }
+            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
 
             return $anggota->load(['account', 'cabang']);
         });

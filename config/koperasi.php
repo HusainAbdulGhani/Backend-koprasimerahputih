@@ -31,6 +31,9 @@ return [
     // Nominal setoran wajib anggota per bulan. Diubah dari sini bila kebijakan koperasi berubah.
     'simpanan_wajib_bulanan' => 100000,
 
+    // Simpanan pokok dibukukan satu kali saat anggota resmi aktif.
+    'simpanan_pokok_awal' => 100000,
+
     'stok_warning_threshold' => 100,
 
     'kasir_per_cabang' => 2,
