@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DetailTransaksi;
+use App\Models\BranchProductStock;
 use App\Models\Kasir;
 use App\Models\Produk;
 use App\Models\TransaksiPos;
@@ -47,18 +48,19 @@ class TransactionService
                 ->select(['id_produk', 'id_cabang', 'nama_produk', 'harga_beli', 'harga_jual', 'stok'])
                 ->whereIn('id_produk', $requestedItems->pluck('id_produk'));
 
-            if ($kasir->id_cabang) {
-                $produkQuery->where(function ($q) use ($kasir) {
-                    $q->where('id_cabang', $kasir->id_cabang)->orWhereNull('id_cabang');
-                });
-            }
-
-            $produkById = $produkQuery->lockForUpdate()->get()->keyBy('id_produk');
+            $produkById = $produkQuery->get()->keyBy('id_produk');
+            $stockByProductId = BranchProductStock::query()
+                ->where('id_cabang', $kasir->id_cabang)
+                ->whereIn('id_produk', $requestedItems->pluck('id_produk'))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id_produk');
 
             foreach ($requestedItems as $item) {
                 $produk = $produkById->get($item['id_produk']);
+                $branchStock = $stockByProductId->get($item['id_produk']);
 
-                if (! $produk) {
+                if (! $produk || ! $branchStock) {
                     throw new RuntimeException('Produk dengan id '.$item['id_produk'].' tidak ditemukan di cabang ini.');
                 }
 
@@ -67,14 +69,14 @@ class TransactionService
                     throw new RuntimeException('Jumlah item harus lebih dari 0.');
                 }
 
-                if ($produk->stok < $jumlah) {
+                if ($branchStock->stok < $jumlah) {
                     throw new RuntimeException('Stok produk '.$produk->nama_produk.' tidak mencukupi.');
                 }
 
-                $produk->stok -= $jumlah;
-                $produk->save();
+                $branchStock->stok -= $jumlah;
+                $branchStock->save();
 
-                if ($produk->stok < $threshold) {
+                if ($branchStock->stok < $threshold) {
                     $warnings[] = 'Stok menipis (< '.$threshold.' pcs): '.$produk->nama_produk;
                 }
 

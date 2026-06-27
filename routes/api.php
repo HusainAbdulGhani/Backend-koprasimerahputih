@@ -131,6 +131,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Persetujuan usulan stok & monitoring stok
         Route::patch('/usulan-stoks/{id_usulan}/approve', [UsulanStokController::class, 'approveUsulan']);
         Route::patch('/usulan-stoks/{id_usulan}/reject', [UsulanStokController::class, 'rejectUsulan']);
+        Route::post('/usulan-stoks/{id_usulan}/complete', [UsulanStokController::class, 'completeDelivery']);
         Route::get('/usulan-stoks/manage', [UsulanStokController::class, 'index']);
         Route::get('/produks/monitor', [ProdukController::class, 'index']);
 
