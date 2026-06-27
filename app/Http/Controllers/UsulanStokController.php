@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\InventoryUpdated;
 use App\Http\Requests\ApproveUsulanRequest;
 use App\Models\BranchProductStock;
 use App\Models\Cabang;
@@ -12,6 +13,7 @@ use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -50,8 +52,7 @@ class UsulanStokController extends Controller
             ]);
         if ($request->filled('status')) $query->where('status', $request->string('status'));
         if ($request->filled('exclude_status')) $query->where('status', '!=', $request->string('exclude_status'));
-        $scope = $this->resolveCabangScope($request);
-        if ($scope !== null) $query->where('id_cabang', $scope);
+        $this->applyUsulanVisibility($query, $request);
 
         $items = $query->orderByDesc('id_usulan')->limit($limit)->get();
         $groups = $items->groupBy(fn (UsulanStok $item) => $item->kode_usulan ?: 'LEGACY-'.$item->id_usulan)
@@ -113,7 +114,14 @@ class UsulanStokController extends Controller
                 'status' => 'Pending', 'tanggal_usulan' => now()->toDateString(),
             ]));
         });
-        return $this->successResponse('Usulan pembelian berhasil diajukan.', $usulan->load(['produk', 'supplier', 'cabang']), 201);
+
+        $this->broadcastInventoryUpdate('stock-proposal-created', $targetCabangId, $kode);
+        $createdRows = UsulanStok::query()
+            ->where('kode_usulan', $kode)
+            ->with(['produk', 'supplier', 'cabang'])
+            ->get();
+
+        return $this->successResponse('Usulan pembelian berhasil diajukan.', $createdRows, 201);
     }
 
     public function approveUsulan(ApproveUsulanRequest $request, int $id_usulan): JsonResponse
@@ -130,8 +138,7 @@ class UsulanStokController extends Controller
     {
         return DB::transaction(function () use ($request, $id_usulan) {
             $first = UsulanStok::lockForUpdate()->findOrFail($id_usulan);
-            $scope = $this->resolveCabangScope($request);
-            if ($scope !== null && (int) $first->id_cabang !== $scope) {
+            if (! $this->canAccessUsulan($request, $first)) {
                 return $this->errorResponse('Pengiriman ini bukan untuk cabang Anda.', null, 403);
             }
 
@@ -163,6 +170,8 @@ class UsulanStokController extends Controller
                 $row->save();
             }
 
+            $this->broadcastInventoryUpdate('delivery-completed', (int) $first->id_cabang, $first->kode_usulan);
+
             return $this->successResponse('Pengiriman selesai dan stok cabang berhasil ditambahkan.', $rows->load(['produk', 'supplier', 'cabang']));
         });
     }
@@ -171,8 +180,7 @@ class UsulanStokController extends Controller
     {
         return DB::transaction(function () use ($request, $idUsulan, $approve) {
             $first = UsulanStok::lockForUpdate()->findOrFail($idUsulan);
-            $scope = $this->resolveCabangScope($request);
-            if ($scope !== null && (int) $first->id_cabang !== $scope) return $this->errorResponse('Usulan ini bukan dari cabang Anda.', null, 403);
+            if (! $this->canAccessUsulan($request, $first)) return $this->errorResponse('Usulan ini bukan dari cabang Anda.', null, 403);
             $rows = UsulanStok::where('kode_usulan', $first->kode_usulan)->lockForUpdate()->get();
             if ($rows->contains(fn ($row) => $row->status !== 'Pending')) return $this->errorResponse('Usulan ini sudah diproses.', null, 422);
             $pengurus = $request->user()?->pengurus;
@@ -187,8 +195,74 @@ class UsulanStokController extends Controller
                 if ($approve && $request->filled('harga_jual')) $row->harga_jual = $request->input('harga_jual');
                 $row->save();
             }
+
+            $this->broadcastInventoryUpdate($approve ? 'stock-proposal-approved' : 'stock-proposal-rejected', (int) $first->id_cabang, $first->kode_usulan);
+
             return $this->successResponse($approve ? 'Usulan disetujui dan pesanan masuk proses pengiriman.' : 'Usulan pembelian ditolak.', $rows->load(['produk', 'supplier', 'cabang']));
         });
+    }
+
+    private function broadcastInventoryUpdate(string $action, ?int $idCabang, ?string $kodeUsulan): void
+    {
+        try {
+            broadcast(new InventoryUpdated($action, $idCabang, $kodeUsulan));
+        } catch (\Throwable $e) {
+            Log::warning('Inventory websocket broadcast failed.', [
+                'action' => $action,
+                'id_cabang' => $idCabang,
+                'kode_usulan' => $kodeUsulan,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function applyUsulanVisibility($query, Request $request): void
+    {
+        $user = $request->user();
+        if (! $user) {
+            return;
+        }
+
+        if ($user->role === 'Admin' || $user->role === 'Pengurus') {
+            if ($request->filled('id_cabang')) {
+                $query->where('id_cabang', (int) $request->query('id_cabang'));
+            }
+
+            return;
+        }
+
+        if ($user->role === 'Gudang') {
+            $gudang = $user->gudang;
+            if ($gudang) {
+                $query->where('id_gudang', $gudang->id_gudang);
+            }
+
+            return;
+        }
+
+        $scope = $this->resolveCabangScope($request);
+        if ($scope !== null) {
+            $query->where('id_cabang', $scope);
+        }
+    }
+
+    private function canAccessUsulan(Request $request, UsulanStok $usulan): bool
+    {
+        $user = $request->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->role === 'Admin' || $user->role === 'Pengurus') {
+            return true;
+        }
+
+        if ($user->role === 'Gudang') {
+            return (int) $usulan->id_gudang === (int) $user->gudang?->id_gudang;
+        }
+
+        $scope = $this->resolveCabangScope($request);
+        return $scope === null || (int) $usulan->id_cabang === $scope;
     }
 
 }
