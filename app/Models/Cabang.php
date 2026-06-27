@@ -40,4 +40,9 @@ class Cabang extends Model
     {
         return $this->hasMany(Jurnal::class, 'id_cabang', 'id_cabang');
     }
+
+    public function productStocks()
+    {
+        return $this->hasMany(BranchProductStock::class, 'id_cabang', 'id_cabang');
+    }
 }

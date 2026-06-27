@@ -24,6 +24,11 @@ class Produk extends Model
         return $this->belongsTo(Cabang::class, 'id_cabang', 'id_cabang');
     }
 
+    public function branchStocks()
+    {
+        return $this->hasMany(BranchProductStock::class, 'id_produk', 'id_produk');
+    }
+
     public function detailTransaksi()
     {
         return $this->hasMany(DetailTransaksi::class, 'id_produk', 'id_produk');

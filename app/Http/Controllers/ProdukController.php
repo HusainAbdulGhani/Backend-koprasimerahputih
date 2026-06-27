@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Produk;
+use App\Models\BranchProductStock;
+use App\Models\Cabang;
 use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ProdukController extends Controller
@@ -19,14 +22,18 @@ class ProdukController extends Controller
     public function index(Request $request): JsonResponse
     {
         $limit = min(max((int) $request->integer('limit', 100), 1), 500);
+        $isKasir = $request->user()?->role === 'Kasir';
         $query = Produk::query()
             ->select(['id_produk', 'id_cabang', 'id_supplier', 'nama_produk', 'harga_beli', 'harga_jual', 'stok'])
-            ->with(['supplier:id_supplier,nama_supplier', 'cabang:id_cabang,nama_cabang']);
+            ->with(['supplier:id_supplier,nama_supplier', 'branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
         $cabangScope = $this->resolveCabangScope($request);
 
         if ($cabangScope !== null) {
-            $query->where(function ($q) use ($cabangScope) {
-                $q->where('id_cabang', $cabangScope)->orWhereNull('id_cabang');
+            $query->whereHas('branchStocks', function ($q) use ($cabangScope, $isKasir) {
+                $q->where('id_cabang', $cabangScope);
+                if ($isKasir) {
+                    $q->where('stok', '>', 0);
+                }
             });
         }
 
@@ -41,20 +48,33 @@ class ProdukController extends Controller
         $threshold = (int) config('koperasi.stok_warning_threshold', 100);
         $produk = $query->orderBy('nama_produk', 'asc')->limit($limit)->get();
 
-        $isKasir = $request->user()?->role === 'Kasir';
+        $selectedBranchId = $cabangScope ?: ($request->filled('id_cabang') ? (int) $request->query('id_cabang') : null);
 
-        $produk->transform(function ($item) use ($threshold, $isKasir) {
-            $item->is_low_stock = ((int) ($item->stok ?? 0)) < $threshold;
+        $produk->transform(function ($item) use ($threshold, $isKasir, $selectedBranchId) {
+            $stocks = $item->branchStocks;
+            $branchStock = $selectedBranchId
+                ? $stocks->firstWhere('id_cabang', $selectedBranchId)
+                : null;
+            $currentStock = $branchStock ? (int) $branchStock->stok : (int) $stocks->sum('stok');
+            $item->stok = $currentStock;
+            $item->is_low_stock = $currentStock < $threshold;
 
             if ($isKasir) {
                 return [
                     'id_produk' => $item->id_produk,
                     'nama_produk' => $item->nama_produk,
                     'harga_jual' => (float) $item->harga_jual,
-                    'stok' => (int) $item->stok,
+                    'stok' => $currentStock,
                     'is_low_stock' => $item->is_low_stock,
                 ];
             }
+
+            $item->branch_stocks = $stocks->map(fn ($stock) => [
+                'id_cabang' => $stock->id_cabang,
+                'nama_cabang' => $stock->cabang?->nama_cabang,
+                'stok' => (int) $stock->stok,
+                'is_low_stock' => (int) $stock->stok < $threshold,
+            ])->values();
 
             return $item;
         });
@@ -102,7 +122,26 @@ class ProdukController extends Controller
             $data['harga_jual'] = 0.0;
         }
 
-        $produk = Produk::create($data);
+        $produk = DB::transaction(function () use ($data, $request) {
+            $produk = Produk::create($data);
+            $now = now();
+
+            $stockRows = Cabang::query()
+                ->select('id_cabang')
+                ->get()
+                ->map(fn (Cabang $cabang) => [
+                    'id_cabang' => $cabang->id_cabang,
+                    'id_produk' => $produk->id_produk,
+                    'stok' => (int) $cabang->id_cabang === (int) $request->id_cabang ? (int) $request->stok : 0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])
+                ->all();
+
+            BranchProductStock::query()->insert($stockRows);
+
+            return $produk->load(['supplier:id_supplier,nama_supplier', 'branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
+        });
 
         return $this->successResponse('Produk berhasil ditambahkan', $produk, 201);
     }
@@ -174,7 +213,20 @@ class ProdukController extends Controller
             }
         }
 
-        $produk->update($data);
+        DB::transaction(function () use ($produk, $data, $request) {
+            $produk->update($data);
+
+            if ($request->has('stok')) {
+                $branchId = $request->filled('id_cabang') ? (int) $request->id_cabang : (int) $produk->id_cabang;
+                BranchProductStock::query()->updateOrCreate(
+                    [
+                        'id_cabang' => $branchId,
+                        'id_produk' => $produk->id_produk,
+                    ],
+                    ['stok' => (int) $request->stok]
+                );
+            }
+        });
 
         return $this->successResponse('Produk berhasil diupdate', $produk);
     }

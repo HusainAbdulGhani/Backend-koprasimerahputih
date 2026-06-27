@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Anggota;
 use App\Models\Akun;
 use App\Models\Angsuran;
+use App\Models\BranchProductStock;
 use App\Models\DetailTransaksi;
 use App\Models\DetailJurnal;
 use App\Models\Jurnal;
@@ -633,44 +634,63 @@ class ReportController extends Controller
             }
             $limit = $this->reportLimit($request, 200, 1000);
 
-            $cabangScope = $this->resolveCabangScope($request);
-            $produkQuery = Produk::query()
-                ->select(['id_produk', 'nama_produk', 'harga_beli', 'harga_jual', 'stok', 'id_cabang']);
-            if ($cabangScope !== null) {
-                $produkQuery->where(function ($q) use ($cabangScope) {
-                    $q->where('id_cabang', $cabangScope)->orWhereNull('id_cabang');
-                });
+            $cabangScope = $this->resolveInventoryCabangScope($request);
+            $requestedCabang = $request->filled('id_cabang') ? (int) $request->query('id_cabang') : null;
+            $effectiveCabang = $cabangScope ?? $requestedCabang;
+            $stockQuery = BranchProductStock::query()
+                ->with(['produk:id_produk,nama_produk,harga_beli,harga_jual', 'cabang:id_cabang,nama_cabang,lokasi']);
+            if ($effectiveCabang !== null) {
+                $stockQuery->where('branch_product_stocks.id_cabang', $effectiveCabang);
             }
-            $summaryProduks = (clone $produkQuery)->get();
-            $produks = $produkQuery->orderBy('nama_produk')->limit($limit)->get();
+            $summaryStocks = (clone $stockQuery)->get();
+            $stocks = $stockQuery
+                ->join('produks', 'produks.id_produk', '=', 'branch_product_stocks.id_produk')
+                ->orderBy('produks.nama_produk')
+                ->select('branch_product_stocks.*')
+                ->limit($limit)
+                ->get();
 
-            $data = $produks->map(function ($p) use ($threshold) {
-                $stok = (int) $p->stok;
+            $data = $stocks->map(function (BranchProductStock $stock) use ($threshold) {
+                $stok = (int) $stock->stok;
                 return [
-                    'id_produk' => $p->id_produk,
-                    'nama_produk' => $p->nama_produk,
-                    'harga_beli' => (float) $p->harga_beli,
-                    'harga_jual' => (float) $p->harga_jual,
+                    'id_cabang' => $stock->id_cabang,
+                    'nama_cabang' => $stock->cabang?->nama_cabang,
+                    'id_produk' => $stock->id_produk,
+                    'nama_produk' => $stock->produk?->nama_produk,
+                    'harga_beli' => (float) $stock->produk?->harga_beli,
+                    'harga_jual' => (float) $stock->produk?->harga_jual,
                     'stok' => $stok,
                     'is_low_stock' => $stok < $threshold,
-                    'nilai_persediaan' => (float) ($stok * (float) $p->harga_beli),
+                    'nilai_persediaan' => (float) ($stok * (float) $stock->produk?->harga_beli),
                 ];
             })->values();
 
             return $this->successResponse('Laporan persediaan berhasil diambil.', [
                 'filters' => [
                     'threshold' => $threshold,
-                    'id_cabang' => $cabangScope,
+                    'id_cabang' => $effectiveCabang,
                 ],
                 'summary' => [
-                    'total_produk' => $summaryProduks->count(),
-                    'stok_kritis' => $summaryProduks->where('stok', '<', $threshold)->count(),
-                    'total_nilai_persediaan' => (float) $summaryProduks->sum(fn (Produk $produk) => (int) $produk->stok * (float) $produk->harga_beli),
+                    'total_produk' => $summaryStocks->pluck('id_produk')->unique()->count(),
+                    'total_stok' => (int) $summaryStocks->sum('stok'),
+                    'stok_kritis' => $summaryStocks->where('stok', '<', $threshold)->count(),
+                    'total_nilai_persediaan' => (float) $summaryStocks->sum(fn (BranchProductStock $stock) => (int) $stock->stok * (float) $stock->produk?->harga_beli),
                 ],
                 'data' => $data,
             ]);
         } catch (\Throwable $e) {
             return $this->errorResponse('Gagal memuat laporan persediaan.', $e->getMessage(), 500);
         }
+    }
+
+    private function resolveInventoryCabangScope(Request $request): ?int
+    {
+        $role = $request->user()?->role;
+
+        if ($role === 'Admin' || $role === 'Pengurus') {
+            return $request->filled('id_cabang') ? (int) $request->query('id_cabang') : null;
+        }
+
+        return $this->resolveCabangScope($request);
     }
 }

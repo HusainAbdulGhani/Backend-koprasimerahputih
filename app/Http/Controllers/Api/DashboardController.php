@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Anggota;
 use App\Models\Angsuran;
+use App\Models\BranchProductStock;
 use App\Models\Pinjaman;
 use App\Models\Produk;
 use App\Models\Simpanan;
@@ -21,12 +22,12 @@ class DashboardController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $cabangScope = $this->resolveCabangScope($request);
+            $cabangScope = $this->resolveInventoryCabangScope($request);
             $threshold = (int) config('koperasi.stok_warning_threshold', 100);
 
             $anggotaQuery = Anggota::query();
             $simpananQuery = Simpanan::query()->where('status', 'Verified');
-            $produkQuery = Produk::query();
+            $stockQuery = BranchProductStock::query()->with(['cabang:id_cabang,nama_cabang', 'produk:id_produk,id_supplier,nama_produk', 'produk.supplier:id_supplier,nama_supplier']);
             $pinjamanQuery = Pinjaman::query();
             $usulanQuery = UsulanStok::query();
             $angsuranQuery = Angsuran::query();
@@ -34,9 +35,7 @@ class DashboardController extends Controller
             if ($cabangScope !== null) {
                 $anggotaQuery->where('id_cabang', $cabangScope);
                 $simpananQuery->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
-                $produkQuery->where(function ($q) use ($cabangScope) {
-                    $q->where('id_cabang', $cabangScope)->orWhereNull('id_cabang');
-                });
+                $stockQuery->where('id_cabang', $cabangScope);
                 $pinjamanQuery->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
                 $usulanQuery->where('id_cabang', $cabangScope);
                 $angsuranQuery->whereHas('pinjaman.anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
@@ -50,22 +49,24 @@ class DashboardController extends Controller
             ];
 
             $alerts = [
-                'stok_kritis' => (clone $produkQuery)
-                    ->with('supplier:id_supplier,nama_supplier')
+                'stok_kritis' => (clone $stockQuery)
                     ->where('stok', '<', $threshold)
                     ->orderBy('stok', 'asc')
                     ->take(10)
-                    ->get(['id_produk', 'id_supplier', 'nama_produk', 'stok'])
-                    ->map(fn (Produk $produk) => [
-                        'id_produk' => $produk->id_produk,
-                        'nama_produk' => $produk->nama_produk,
-                        'stok' => (int) $produk->stok,
-                        'nama_supplier' => $produk->supplier?->nama_supplier,
+                    ->get()
+                    ->map(fn (BranchProductStock $stock) => [
+                        'id_produk' => $stock->id_produk,
+                        'id_cabang' => $stock->id_cabang,
+                        'nama_cabang' => $stock->cabang?->nama_cabang,
+                        'nama_produk' => $stock->produk?->nama_produk,
+                        'stok' => (int) $stock->stok,
+                        'nama_supplier' => $stock->produk?->supplier?->nama_supplier,
                     ]),
                 // Daftar dibatasi agar payload ringan, tetapi total harus memakai
                 // seluruh produk kritis supaya sama dengan modul inventaris.
-                'total_stok_kritis' => (clone $produkQuery)->where('stok', '<', $threshold)->count(),
-                'total_produk' => (clone $produkQuery)->count(),
+                'total_stok_kritis' => (clone $stockQuery)->where('stok', '<', $threshold)->count(),
+                'total_produk' => (clone $stockQuery)->distinct('id_produk')->count('id_produk'),
+                'total_stok' => (int) (clone $stockQuery)->sum('stok'),
                 'threshold' => $threshold,
             ];
 
@@ -104,12 +105,12 @@ class DashboardController extends Controller
                     'amount' => (float) $item->jumlah_bayar,
                     'date' => $item->tanggal_bayar?->toDateString(),
                 ]))
-                ->merge((clone $usulanQuery)->with(['gudang', 'produk'])->orderByDesc('tanggal_usulan')->take(5)->get()->map(fn (UsulanStok $item) => [
+                ->merge((clone $usulanQuery)->with(['cabang', 'gudang', 'produk'])->orderByDesc('tanggal_usulan')->take(5)->get()->map(fn (UsulanStok $item) => [
                     'id' => 'usulan-'.$item->id_usulan,
                     'type' => 'inventaris',
                     'user' => $item->gudang?->nama_petugas ?? 'Petugas Gudang',
                     'role' => 'Gudang',
-                    'action' => 'Mengajukan stok '.$item->produk?->nama_produk,
+                    'action' => 'Mengajukan stok '.$item->produk?->nama_produk.' untuk '.$item->cabang?->nama_cabang,
                     'amount' => (float) $item->jumlah * (float) $item->harga_beli,
                     'date' => $item->tanggal_usulan?->toDateString(),
                 ]))
@@ -127,5 +128,16 @@ class DashboardController extends Controller
         } catch (\Throwable $e) {
             return $this->errorResponse('Gagal memuat dashboard.', $e->getMessage(), 500);
         }
+    }
+
+    private function resolveInventoryCabangScope(Request $request): ?int
+    {
+        $role = $request->user()?->role;
+
+        if ($role === 'Admin' || $role === 'Pengurus') {
+            return $request->filled('id_cabang') ? (int) $request->query('id_cabang') : null;
+        }
+
+        return $this->resolveCabangScope($request);
     }
 }
