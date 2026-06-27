@@ -29,7 +29,7 @@ return [
     'pinjaman_limit_multiplier_simpanan' => 3,
 
     // Nominal setoran wajib anggota per bulan. Diubah dari sini bila kebijakan koperasi berubah.
-    'simpanan_wajib_bulanan' => 100000,
+    'simpanan_wajib_bulanan' => 50000,
 
     // Simpanan pokok dibukukan satu kali saat anggota resmi aktif.
     'simpanan_pokok_awal' => 100000,

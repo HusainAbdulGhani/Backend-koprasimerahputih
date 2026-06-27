@@ -233,7 +233,7 @@ class AnggotaController extends Controller
         }
         $anggota->save();
         if ($anggota->status === 'Aktif') {
-            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
+            app(SimpananPolicyService::class)->ensureSimpananAwal($anggota);
         }
         $anggota->load(['account', 'cabang']);
 
@@ -304,7 +304,7 @@ class AnggotaController extends Controller
             $anggota->tanggal_daftar = $anggota->tanggal_daftar ?? now()->toDateString();
             $anggota->save();
 
-            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
+            app(SimpananPolicyService::class)->ensureSimpananAwal($anggota);
 
             return $anggota->load(['account', 'cabang']);
         });

@@ -229,9 +229,20 @@ class DatabaseSeeder extends Seeder
 
         Simpanan::firstOrCreate([
             'id_anggota' => $anggota->id_anggota,
-            'jenis_simpanan' => 'Wajib',
+            'jenis_simpanan' => 'Pokok',
+        ], [
             'jumlah' => 100000,
             'tanggal' => now()->toDateString(),
+            'status' => 'Verified',
+        ]);
+
+        Simpanan::firstOrCreate([
+            'id_anggota' => $anggota->id_anggota,
+            'jenis_simpanan' => 'Wajib',
+        ], [
+            'jumlah' => 50000,
+            'tanggal' => now()->toDateString(),
+            'status' => 'Verified',
         ]);
 
         Pinjaman::firstOrCreate(

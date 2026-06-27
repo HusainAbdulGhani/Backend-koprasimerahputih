@@ -12,6 +12,11 @@ class SimpananPolicyService
         return (float) config('koperasi.simpanan_pokok_awal', 100000);
     }
 
+    public function simpananWajibAwal(): float
+    {
+        return (float) config('koperasi.simpanan_wajib_bulanan', 50000);
+    }
+
     public function hasSimpananPokok(int $idAnggota): bool
     {
         return Simpanan::query()
@@ -21,18 +26,37 @@ class SimpananPolicyService
             ->exists();
     }
 
-    public function ensureSimpananPokokAwal(Anggota $anggota): ?Simpanan
+    public function hasSimpananWajib(int $idAnggota): bool
     {
-        if ($this->hasSimpananPokok((int) $anggota->id_anggota)) {
-            return null;
+        return Simpanan::query()
+            ->where('id_anggota', $idAnggota)
+            ->where('jenis_simpanan', 'Wajib')
+            ->whereIn('status', ['Pending', 'Verified'])
+            ->exists();
+    }
+
+    public function ensureSimpananAwal(Anggota $anggota): void
+    {
+        // 1. Ensure Simpanan Pokok
+        if (!$this->hasSimpananPokok((int) $anggota->id_anggota)) {
+            Simpanan::create([
+                'id_anggota' => $anggota->id_anggota,
+                'jenis_simpanan' => 'Pokok',
+                'jumlah' => $this->simpananPokokAwal(),
+                'tanggal' => now()->toDateString(),
+                'status' => 'Verified',
+            ]);
         }
 
-        return Simpanan::create([
-            'id_anggota' => $anggota->id_anggota,
-            'jenis_simpanan' => 'Pokok',
-            'jumlah' => $this->simpananPokokAwal(),
-            'tanggal' => now()->toDateString(),
-            'status' => 'Verified',
-        ]);
+        // 2. Ensure Simpanan Wajib
+        if (!$this->hasSimpananWajib((int) $anggota->id_anggota)) {
+            Simpanan::create([
+                'id_anggota' => $anggota->id_anggota,
+                'jenis_simpanan' => 'Wajib',
+                'jumlah' => $this->simpananWajibAwal(),
+                'tanggal' => now()->toDateString(),
+                'status' => 'Verified',
+            ]);
+        }
     }
 }

@@ -100,7 +100,7 @@ class UserDirectoryService
                 if ($status === 'Aktif') {
                     $anggota->nomor_anggota = 'AGT-'.$anggota->id_cabang.'-'.str_pad((string) $anggota->id_anggota, 6, '0', STR_PAD_LEFT);
                     $anggota->save();
-                    app(SimpananPolicyService::class)->ensureSimpananPokokAwal($anggota);
+                    app(SimpananPolicyService::class)->ensureSimpananAwal($anggota);
                 }
 
                 return ['account' => $account, 'profile' => $anggota];
@@ -476,7 +476,7 @@ class UserDirectoryService
         $a->save();
 
         if ($a->status === 'Aktif') {
-            app(SimpananPolicyService::class)->ensureSimpananPokokAwal($a);
+            app(SimpananPolicyService::class)->ensureSimpananAwal($a);
         }
 
         return $a->fresh('cabang');
