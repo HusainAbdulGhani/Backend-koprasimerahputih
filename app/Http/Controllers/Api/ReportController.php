@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Anggota;
 use App\Models\Akun;
 use App\Models\Angsuran;
+use App\Models\DetailTransaksi;
 use App\Models\DetailJurnal;
 use App\Models\Jurnal;
 use App\Models\Pinjaman;
@@ -16,10 +17,16 @@ use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
     use ApiResponse, ResolvesCabangScope;
+
+    private function reportLimit(Request $request, int $default = 100, int $max = 500): int
+    {
+        return min(max((int) $request->integer('limit', $default), 1), $max);
+    }
 
     /**
      * Laporan penjualan dengan filter kasir dan bulan/tahun.
@@ -37,8 +44,11 @@ class ReportController extends Controller
             $date = $request->query('date');
             $idKasir = $request->query('id_kasir');
             $cabangScope = $this->resolveCabangScope($request);
+            $limit = $this->reportLimit($request);
 
-            $query = TransaksiPos::query()->with(['kasir.cabang', 'detailTransaksi.produk']);
+            $query = TransaksiPos::query()
+                ->select(['id_transaksi', 'id_kasir', 'id_anggota', 'tanggal_jam', 'total_bayar', 'ppn'])
+                ->with(['kasir:id_kasir,id_account,nama_kasir,id_cabang', 'kasir.cabang:id_cabang,nama_cabang']);
 
             if ($period === 'daily' && $date) {
                 $query->whereDate('tanggal_jam', $date);
@@ -56,16 +66,17 @@ class ReportController extends Controller
                 $query->whereHas('kasir', fn ($q) => $q->where('id_cabang', $cabangScope));
             }
 
-            $data = $query->orderByDesc('tanggal_jam')->get();
+            $transactionIds = (clone $query)->pluck('id_transaksi');
+            $totalPenjualan = (float) (clone $query)->sum('total_bayar');
+            $totalTransaksi = (clone $query)->count();
+            $totalHpp = $transactionIds->isEmpty()
+                ? 0.0
+                : (float) DetailTransaksi::query()
+                    ->join('produks', 'produks.id_produk', '=', 'detail_transaksi.id_produk')
+                    ->whereIn('detail_transaksi.id_transaksi', $transactionIds)
+                    ->sum(DB::raw('detail_transaksi.jumlah * produks.harga_beli'));
 
-            $totalPenjualan = (float) $data->sum('total_bayar');
-            $totalHpp = 0.0;
-            foreach ($data as $trx) {
-                foreach ($trx->detailTransaksi as $detail) {
-                    $hargaBeli = (float) ($detail->produk?->harga_beli ?? 0);
-                    $totalHpp += $hargaBeli * (int) $detail->jumlah;
-                }
-            }
+            $data = $query->orderByDesc('tanggal_jam')->limit($limit)->get();
 
             return $this->successResponse('Laporan penjualan berhasil diambil.', [
                 'filters' => [
@@ -77,7 +88,7 @@ class ReportController extends Controller
                     'id_cabang' => $cabangScope,
                 ],
                 'summary' => [
-                    'total_transaksi' => $data->count(),
+                    'total_transaksi' => $totalTransaksi,
                     'total_penjualan' => $totalPenjualan,
                     'total_hpp' => $totalHpp,
                     'keuntungan' => $totalPenjualan - $totalHpp,
@@ -97,8 +108,36 @@ class ReportController extends Controller
         try {
             $status = $request->query('status');
             $cabangScope = $this->resolveCabangScope($request);
+            $limit = $this->reportLimit($request);
 
-            $query = Pinjaman::with(['anggota.cabang', 'pengurusAcc', 'angsurans']);
+            $query = Pinjaman::query()
+                ->select([
+                    'id_pinjaman',
+                    'id_anggota',
+                    'id_pengurus_acc',
+                    'jumlah_pinjaman',
+                    'biaya_operasional',
+                    'tenor',
+                    'tanggal_pengajuan',
+                    'status',
+                ])
+                ->with(['anggota:id_anggota,nomor_anggota,nama_anggota,id_cabang', 'anggota.cabang:id_cabang,nama_cabang'])
+                ->selectSub(
+                    Angsuran::query()
+                        ->select('sisa_pinjaman')
+                        ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                        ->where('status', 'Verified')
+                        ->orderByDesc('id_angsuran')
+                        ->limit(1),
+                    'sisa_pinjaman_terakhir'
+                )
+                ->selectSub(
+                    Angsuran::query()
+                        ->selectRaw('COALESCE(SUM(fee_bayar), 0)')
+                        ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                        ->where('status', 'Verified'),
+                    'fee_terkumpul'
+                );
             if ($status) {
                 $query->where('status', $status);
             }
@@ -106,18 +145,11 @@ class ReportController extends Controller
                 $query->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
             }
 
-            $pinjamans = $query->orderByDesc('tanggal_pengajuan')->get();
+            $pinjamans = $query->orderByDesc('tanggal_pengajuan')->limit($limit)->get();
 
             $rows = $pinjamans->map(function ($p) {
-                $lastVerified = Angsuran::where('id_pinjaman', $p->id_pinjaman)
-                    ->where('status', 'Verified')
-                    ->orderByDesc('id_angsuran')
-                    ->first();
-
-                $sisa = $lastVerified ? (float) $lastVerified->sisa_pinjaman : (float) $p->jumlah_pinjaman;
-                $feeTerkumpul = (float) Angsuran::where('id_pinjaman', $p->id_pinjaman)
-                    ->where('status', 'Verified')
-                    ->sum('fee_bayar');
+                $sisa = $p->sisa_pinjaman_terakhir !== null ? (float) $p->sisa_pinjaman_terakhir : (float) $p->jumlah_pinjaman;
+                $feeTerkumpul = (float) $p->fee_terkumpul;
 
                 return [
                     'id_pinjaman' => $p->id_pinjaman,
@@ -501,8 +533,11 @@ class ReportController extends Controller
         try {
             $status = $request->query('status');
             $cabangScope = $this->resolveCabangScope($request);
+            $limit = $this->reportLimit($request);
 
-            $query = Anggota::query()->with('cabang');
+            $query = Anggota::query()
+                ->select(['id_anggota', 'nomor_anggota', 'nama_anggota', 'status', 'id_cabang'])
+                ->with('cabang:id_cabang,nama_cabang');
             if ($cabangScope !== null) {
                 $query->where('id_cabang', $cabangScope);
             }
@@ -510,7 +545,8 @@ class ReportController extends Controller
                 $query->where('status', $status);
             }
 
-            $data = $query->orderBy('nama_anggota')->get();
+            $summaryQuery = clone $query;
+            $data = $query->orderBy('nama_anggota')->limit($limit)->get();
 
             return $this->successResponse('Laporan anggota berhasil diambil.', [
                 'filters' => [
@@ -518,10 +554,10 @@ class ReportController extends Controller
                     'id_cabang' => $cabangScope,
                 ],
                 'summary' => [
-                    'total' => $data->count(),
-                    'aktif' => $data->where('status', 'Aktif')->count(),
-                    'non_aktif' => $data->where('status', 'Non-Aktif')->count(),
-                    'calon' => $data->where('status', 'Calon')->count(),
+                    'total' => (clone $summaryQuery)->count(),
+                    'aktif' => (clone $summaryQuery)->where('status', 'Aktif')->count(),
+                    'non_aktif' => (clone $summaryQuery)->where('status', 'Non-Aktif')->count(),
+                    'calon' => (clone $summaryQuery)->where('status', 'Calon')->count(),
                 ],
                 'data' => $data,
             ]);
@@ -541,8 +577,12 @@ class ReportController extends Controller
             $start = $request->query('start');
             $end = $request->query('end');
             $cabangScope = $this->resolveCabangScope($request);
+            $limit = $this->reportLimit($request);
 
-            $query = Simpanan::query()->with('anggota')->where('status', 'Verified');
+            $query = Simpanan::query()
+                ->select(['id_simpanan', 'id_anggota', 'jenis_simpanan', 'jumlah', 'tanggal', 'status'])
+                ->with('anggota:id_anggota,nomor_anggota,nama_anggota,id_cabang')
+                ->where('status', 'Verified');
             if ($idAnggota !== null) {
                 $query->where('id_anggota', (int) $idAnggota);
             }
@@ -556,7 +596,8 @@ class ReportController extends Controller
                 $query->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
             }
 
-            $data = $query->orderByDesc('tanggal')->get();
+            $summaryQuery = clone $query;
+            $data = $query->orderByDesc('tanggal')->limit($limit)->get();
 
             return $this->successResponse('Laporan simpanan berhasil diambil.', [
                 'filters' => [
@@ -566,11 +607,11 @@ class ReportController extends Controller
                     'id_cabang' => $cabangScope,
                 ],
                 'summary' => [
-                    'total_transaksi' => $data->count(),
-                    'total_simpanan' => (float) $data->sum('jumlah'),
-                    'pokok' => (float) $data->where('jenis_simpanan', 'Pokok')->sum('jumlah'),
-                    'wajib' => (float) $data->where('jenis_simpanan', 'Wajib')->sum('jumlah'),
-                    'sukarela' => (float) $data->where('jenis_simpanan', 'Sukarela')->sum('jumlah'),
+                    'total_transaksi' => (clone $summaryQuery)->count(),
+                    'total_simpanan' => (float) (clone $summaryQuery)->sum('jumlah'),
+                    'pokok' => (float) (clone $summaryQuery)->where('jenis_simpanan', 'Pokok')->sum('jumlah'),
+                    'wajib' => (float) (clone $summaryQuery)->where('jenis_simpanan', 'Wajib')->sum('jumlah'),
+                    'sukarela' => (float) (clone $summaryQuery)->where('jenis_simpanan', 'Sukarela')->sum('jumlah'),
                 ],
                 'data' => $data,
             ]);
@@ -590,15 +631,18 @@ class ReportController extends Controller
             if ($threshold <= 0) {
                 $threshold = 100;
             }
+            $limit = $this->reportLimit($request, 200, 1000);
 
             $cabangScope = $this->resolveCabangScope($request);
-            $produkQuery = Produk::query();
+            $produkQuery = Produk::query()
+                ->select(['id_produk', 'nama_produk', 'harga_beli', 'harga_jual', 'stok', 'id_cabang']);
             if ($cabangScope !== null) {
                 $produkQuery->where(function ($q) use ($cabangScope) {
                     $q->where('id_cabang', $cabangScope)->orWhereNull('id_cabang');
                 });
             }
-            $produks = $produkQuery->orderBy('nama_produk')->get();
+            $summaryProduks = (clone $produkQuery)->get();
+            $produks = $produkQuery->orderBy('nama_produk')->limit($limit)->get();
 
             $data = $produks->map(function ($p) use ($threshold) {
                 $stok = (int) $p->stok;
@@ -619,9 +663,9 @@ class ReportController extends Controller
                     'id_cabang' => $cabangScope,
                 ],
                 'summary' => [
-                    'total_produk' => $data->count(),
-                    'stok_kritis' => $data->where('is_low_stock', true)->count(),
-                    'total_nilai_persediaan' => (float) $data->sum('nilai_persediaan'),
+                    'total_produk' => $summaryProduks->count(),
+                    'stok_kritis' => $summaryProduks->where('stok', '<', $threshold)->count(),
+                    'total_nilai_persediaan' => (float) $summaryProduks->sum(fn (Produk $produk) => (int) $produk->stok * (float) $produk->harga_beli),
                 ],
                 'data' => $data,
             ]);
