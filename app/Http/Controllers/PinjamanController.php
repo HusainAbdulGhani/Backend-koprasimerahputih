@@ -73,6 +73,38 @@ class PinjamanController extends Controller
                     ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
                     ->where('status', 'Pending'),
             ]);
+
+            if ($request->filled('filter_lunas')) {
+                $filterLunas = $request->boolean('filter_lunas');
+                if ($filterLunas) {
+                    $query->whereHas('angsurans', function ($q) {
+                        $q->where('status', 'Verified');
+                    })->where(function ($sub) {
+                        $sub->select('sisa_pinjaman')
+                            ->from('angsurans')
+                            ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                            ->where('status', 'Verified')
+                            ->orderByDesc('id_angsuran')
+                            ->limit(1);
+                    }, '=', 0);
+                } else {
+                    $query->where(function ($q) {
+                        $q->whereNotExists(function ($sub) {
+                            $sub->select(DB::raw(1))
+                                ->from('angsurans')
+                                ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                                ->where('status', 'Verified');
+                        })->orWhere(function ($sub) {
+                            $sub->select('sisa_pinjaman')
+                                ->from('angsurans')
+                                ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                                ->where('status', 'Verified')
+                                ->orderByDesc('id_angsuran')
+                                ->limit(1);
+                        }, '>', 0);
+                    });
+                }
+            }
         }
 
         $data = $request->boolean('paginate', true)
@@ -241,5 +273,66 @@ class PinjamanController extends Controller
         $pinjaman->delete();
 
         return $this->successResponse('Pinjaman berhasil dihapus.', null, 200);
+    }
+
+    public function counts(Request $request): JsonResponse
+    {
+        $queryPending = Pinjaman::query()->where('status', 'Pending');
+        $queryApproved = Pinjaman::query()->where('status', 'Approved');
+
+        $cabangScope = $this->resolveCabangScope($request);
+        if ($cabangScope !== null) {
+            $queryPending->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
+            $queryApproved->whereHas('anggota', fn ($q) => $q->where('id_cabang', $cabangScope));
+        }
+
+        $pendingCount = $queryPending->count();
+
+        $latestVerifiedSisa = Angsuran::query()
+            ->select('sisa_pinjaman')
+            ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+            ->where('status', 'Verified')
+            ->orderByDesc('id_angsuran')
+            ->limit(1);
+
+        $completedCount = (clone $queryApproved)->whereHas('angsurans', function ($q) {
+            $q->where('status', 'Verified');
+        })->where(function ($sub) {
+            $sub->select('sisa_pinjaman')
+                ->from('angsurans')
+                ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                ->where('status', 'Verified')
+                ->orderByDesc('id_angsuran')
+                ->limit(1);
+        }, '=', 0)->count();
+
+        $activeCount = (clone $queryApproved)->where(function ($q) {
+            $q->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('angsurans')
+                    ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                    ->where('status', 'Verified');
+            })->orWhere(function ($sub) {
+                $sub->select('sisa_pinjaman')
+                    ->from('angsurans')
+                    ->whereColumn('angsurans.id_pinjaman', 'pinjamans.id_pinjaman')
+                    ->where('status', 'Verified')
+                    ->orderByDesc('id_angsuran')
+                    ->limit(1);
+            }, '>', 0);
+        })->count();
+
+        $savingsQuery = \App\Models\Anggota::query();
+        if ($cabangScope !== null) {
+            $savingsQuery->where('id_cabang', $cabangScope);
+        }
+        $savingsCount = $savingsQuery->count();
+
+        return $this->successResponse('Jumlah pinjaman dan simpanan berhasil diambil.', [
+            'pending_loans' => $pendingCount,
+            'active_loans' => $activeCount,
+            'completed_loans' => $completedCount,
+            'savings' => $savingsCount,
+        ]);
     }
 }

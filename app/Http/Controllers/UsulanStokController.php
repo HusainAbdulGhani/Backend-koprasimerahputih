@@ -255,6 +255,28 @@ class UsulanStokController extends Controller
         }
     }
 
+    public function counts(Request $request): JsonResponse
+    {
+        $queryPending = UsulanStok::query()->where('status', 'Pending');
+        $queryHistory = UsulanStok::query()->where('status', '!=', 'Pending');
+        
+        $this->applyUsulanVisibility($queryPending, $request);
+        $this->applyUsulanVisibility($queryHistory, $request);
+
+        $pendingCount = $queryPending->pluck('kode_usulan', 'id_usulan')
+            ->groupBy(fn ($kode, $id) => $kode ?: 'LEGACY-'.$id)
+            ->count();
+
+        $historyCount = $queryHistory->pluck('kode_usulan', 'id_usulan')
+            ->groupBy(fn ($kode, $id) => $kode ?: 'LEGACY-'.$id)
+            ->count();
+
+        return $this->successResponse('Jumlah usulan stok berhasil diambil.', [
+            'pending' => $pendingCount,
+            'history' => $historyCount,
+        ]);
+    }
+
     private function canAccessUsulan(Request $request, UsulanStok $usulan): bool
     {
         $user = $request->user();

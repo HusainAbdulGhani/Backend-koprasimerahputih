@@ -96,6 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:Gudang,Pengurus,Admin')->group(function () {
         Route::get('/produks/stok', [ProdukController::class, 'index']);
         Route::get('/suppliers', [SupplierController::class, 'index']);
+        Route::get('/usulan-stoks/counts', [UsulanStokController::class, 'counts']);
         Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
     });
     Route::middleware('role:Admin')->group(function () {
@@ -116,6 +117,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/anggota/{id_anggota}', [AnggotaController::class, 'destroy']);
 
         // Simpan pinjam
+        Route::get('/pinjamans/counts', [PinjamanController::class, 'counts']);
         Route::get('/pinjamans/manage', [PinjamanController::class, 'index']);
         Route::patch('/pinjamans/{id_pinjaman}/approve', [PinjamanController::class, 'approve']);
         Route::patch('/pinjamans/{id_pinjaman}/reject', [PinjamanController::class, 'reject']);
