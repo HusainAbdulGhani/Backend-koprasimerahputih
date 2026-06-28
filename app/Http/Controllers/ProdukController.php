@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\InventoryUpdated;
 use App\Models\Produk;
 use App\Models\BranchProductStock;
 use App\Models\Cabang;
@@ -10,6 +11,7 @@ use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -174,6 +176,10 @@ class ProdukController extends Controller
             return $produk->load(['supplier:id_supplier,nama_supplier', 'branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
         });
 
+        $this->broadcastMasterDataUpdate('product-created', [
+            'product' => $produk,
+        ]);
+
         return $this->successResponse('Produk berhasil ditambahkan', $produk, 201);
     }
 
@@ -268,6 +274,11 @@ class ProdukController extends Controller
             }
         });
 
+        $produk->refresh()->load(['supplier:id_supplier,nama_supplier']);
+        $this->broadcastMasterDataUpdate('product-updated', [
+            'product' => $produk,
+        ]);
+
         return $this->successResponse('Produk berhasil diupdate', $produk);
     }
 
@@ -278,7 +289,17 @@ class ProdukController extends Controller
             return $this->errorResponse('Produk tidak ditemukan', null, 404);
         }
 
+        $deletedProduct = [
+            'id_produk' => $produk->id_produk,
+            'id_supplier' => $produk->id_supplier,
+            'nama_produk' => $produk->nama_produk,
+        ];
+
         $produk->delete();
+
+        $this->broadcastMasterDataUpdate('product-deleted', [
+            'product' => $deletedProduct,
+        ]);
 
         return $this->successResponse('Produk berhasil dihapus', null);
     }
@@ -297,8 +318,25 @@ class ProdukController extends Controller
         $ids = collect($request->input('ids'))->map(fn ($id) => (int) $id)->unique()->values();
         $deleted = Produk::query()->whereIn('id_produk', $ids)->delete();
 
+        $this->broadcastMasterDataUpdate('product-deleted', [
+            'ids' => $ids,
+            'deleted' => $deleted,
+        ]);
+
         return $this->successResponse('Produk terpilih berhasil dihapus', [
             'deleted' => $deleted,
         ]);
+    }
+
+    private function broadcastMasterDataUpdate(string $action, array $payload = []): void
+    {
+        try {
+            broadcast(new InventoryUpdated($action, null, null, $payload));
+        } catch (\Throwable $e) {
+            Log::warning('Master product websocket broadcast failed.', [
+                'action' => $action,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
