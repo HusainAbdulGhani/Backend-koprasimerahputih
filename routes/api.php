@@ -87,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- GUDANG, PENGURUS, ADMIN: produk management ---
     Route::middleware('role:Admin')->group(function () {
+        Route::post('/produks/bulk-delete', [ProdukController::class, 'bulkDelete']);
         Route::apiResource('produks', ProdukController::class)
             ->except(['index'])
             ->whereNumber('produk');
@@ -100,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/usulan-stoks', [UsulanStokController::class, 'index']);
     });
     Route::middleware('role:Admin')->group(function () {
+        Route::post('/suppliers/bulk-delete', [SupplierController::class, 'bulkDelete']);
         Route::apiResource('suppliers', SupplierController::class)->except(['index']);
     });
     Route::middleware('role:Gudang')->group(function () {

@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\InventoryUpdated;
 use App\Services\SupplierService;
 use App\Traits\ApiResponse;
 use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class SupplierController extends Controller
 {
@@ -36,6 +38,10 @@ class SupplierController extends Controller
         ]);
 
         $supplier = $this->supplierService->createSupplier($validated);
+        $this->broadcastMasterDataUpdate('supplier-created', [
+            'supplier' => $supplier,
+        ]);
+
         return $this->successResponse('Supplier berhasil ditambahkan.', $supplier, 201);
     }
 
@@ -66,6 +72,10 @@ class SupplierController extends Controller
 
         try {
             $supplier = $this->supplierService->updateSupplier($id, $validated);
+            $this->broadcastMasterDataUpdate('supplier-updated', [
+                'supplier' => $supplier,
+            ]);
+
             return $this->successResponse('Data supplier berhasil diperbarui.', $supplier);
         } catch (\Exception $e) {
             return $this->errorResponse('Gagal memperbarui supplier.', $e->getMessage(), 404);
@@ -86,9 +96,61 @@ class SupplierController extends Controller
             }
 
             $supplier->delete();
+            $this->broadcastMasterDataUpdate('supplier-deleted', [
+                'supplier' => [
+                    'id_supplier' => $supplier->id_supplier,
+                    'nama_supplier' => $supplier->nama_supplier,
+                ],
+            ]);
+
             return $this->successResponse('Supplier berhasil dihapus.', null);
         } catch (\Exception $e) {
             return $this->errorResponse('Supplier tidak ditemukan.', null, 404);
+        }
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:suppliers,id_supplier',
+        ]);
+
+        $suppliersWithProducts = Supplier::query()
+            ->whereIn('id_supplier', $validated['ids'])
+            ->whereHas('produks')
+            ->pluck('nama_supplier')
+            ->values();
+
+        if ($suppliersWithProducts->isNotEmpty()) {
+            return $this->errorResponse(
+                'Tidak bisa menghapus supplier yang masih memiliki produk.',
+                ['suppliers' => $suppliersWithProducts],
+                422
+            );
+        }
+
+        $deleted = Supplier::query()->whereIn('id_supplier', $validated['ids'])->delete();
+
+        $this->broadcastMasterDataUpdate('supplier-deleted', [
+            'ids' => $validated['ids'],
+            'deleted' => $deleted,
+        ]);
+
+        return $this->successResponse('Supplier terpilih berhasil dihapus.', [
+            'deleted' => $deleted,
+        ]);
+    }
+
+    private function broadcastMasterDataUpdate(string $action, array $payload = []): void
+    {
+        try {
+            broadcast(new InventoryUpdated($action, null, null, $payload));
+        } catch (\Throwable $e) {
+            Log::warning('Master supplier websocket broadcast failed.', [
+                'action' => $action,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }
