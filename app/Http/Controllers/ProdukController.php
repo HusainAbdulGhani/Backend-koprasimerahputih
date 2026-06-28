@@ -24,10 +24,18 @@ class ProdukController extends Controller
     {
         $limit = min(max((int) $request->integer('limit', 100), 1), 500);
         $isKasir = $request->user()?->role === 'Kasir';
-        $query = Produk::query()
-            ->select(['id_produk', 'id_cabang', 'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'harga_jual', 'stok'])
-            ->with(['supplier:id_supplier,nama_supplier', 'branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
         $cabangScope = $this->resolveCabangScope($request);
+        $selectedBranchId = $cabangScope ?: ($request->filled('id_cabang') ? (int) $request->query('id_cabang') : null);
+        $includeBranchStocks = $selectedBranchId !== null || $request->boolean('include_branch_stocks', true);
+        $query = Produk::query()
+            ->select(['id_produk', 'id_cabang', 'id_supplier', 'nama_produk', 'kategori', 'image_url', 'harga_beli', 'harga_jual', 'stok'])
+            ->with(['supplier:id_supplier,nama_supplier'])
+            ->withCount('branchStocks')
+            ->withSum('branchStocks as branch_stock_total', 'stok');
+
+        if ($includeBranchStocks) {
+            $query->with(['branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
+        }
 
         if ($cabangScope !== null) {
             $query->whereHas('branchStocks', function ($q) use ($cabangScope, $isKasir) {
@@ -49,23 +57,29 @@ class ProdukController extends Controller
         $threshold = (int) config('koperasi.stok_warning_threshold', 100);
         $produk = $query->orderBy('nama_produk', 'asc')->limit($limit)->get();
 
-        $selectedBranchId = $cabangScope ?: ($request->filled('id_cabang') ? (int) $request->query('id_cabang') : null);
+        $produk->transform(function ($item) use ($threshold, $isKasir, $selectedBranchId, $includeBranchStocks) {
+            if ($includeBranchStocks) {
+                $stocks = $selectedBranchId
+                    ? $item->branchStocks->where('id_cabang', $selectedBranchId)->values()
+                    : $item->branchStocks;
+                $branchStock = $selectedBranchId
+                    ? $stocks->firstWhere('id_cabang', $selectedBranchId)
+                    : null;
+                $currentStock = $branchStock ? (int) $branchStock->stok : (int) $stocks->sum('stok');
+            } else {
+                $stocks = collect();
+                $currentStock = (int) ($item->branch_stock_total ?? $item->stok ?? 0);
+            }
 
-        $produk->transform(function ($item) use ($threshold, $isKasir, $selectedBranchId) {
-            $stocks = $selectedBranchId
-                ? $item->branchStocks->where('id_cabang', $selectedBranchId)->values()
-                : $item->branchStocks;
-            $branchStock = $selectedBranchId
-                ? $stocks->firstWhere('id_cabang', $selectedBranchId)
-                : null;
-            $currentStock = $branchStock ? (int) $branchStock->stok : (int) $stocks->sum('stok');
             $item->stok = $currentStock;
             $item->is_low_stock = $currentStock < $threshold;
+            $item->branch_stock_count = (int) ($item->branch_stocks_count ?? $stocks->count());
 
             if ($isKasir) {
                 return [
                     'id_produk' => $item->id_produk,
                     'nama_produk' => $item->nama_produk,
+                    'kategori' => $item->kategori,
                     'image_url' => $item->image_url,
                     'harga_jual' => (float) $item->harga_jual,
                     'stok' => $currentStock,
@@ -93,6 +107,7 @@ class ProdukController extends Controller
             'id_cabang' => 'nullable|exists:cabangs,id_cabang',
             'id_supplier' => 'required|exists:suppliers,id_supplier',
             'nama_produk' => 'required|string|max:255',
+            'kategori' => 'nullable|string|max:100',
             'image_url' => 'nullable|string|max:2048',
             'image_file' => 'nullable|image|max:2048',
             'harga_beli' => 'required|numeric|min:0',
@@ -119,10 +134,11 @@ class ProdukController extends Controller
         }
 
         $data = $request->only([
-            'id_cabang', 'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
+            'id_cabang', 'id_supplier', 'nama_produk', 'kategori', 'image_url', 'harga_beli', 'stok',
         ]);
         $data['id_cabang'] = $request->filled('id_cabang') ? (int) $request->id_cabang : null;
         $data['stok'] = (int) ($request->input('stok', 0));
+        $data['kategori'] = $request->filled('kategori') ? trim((string) $request->kategori) : null;
 
         if ($request->hasFile('image_file')) {
             $data['image_url'] = Storage::disk('public')->url($request->file('image_file')->store('products', 'public'));
@@ -193,6 +209,7 @@ class ProdukController extends Controller
         $rules = [
             'id_supplier' => 'sometimes|exists:suppliers,id_supplier',
             'nama_produk' => 'sometimes|string|max:255',
+            'kategori' => 'sometimes|nullable|string|max:100',
             'image_url' => 'sometimes|nullable|string|max:2048',
             'image_file' => 'sometimes|nullable|image|max:2048',
             'harga_beli' => 'sometimes|numeric|min:0',
@@ -221,8 +238,11 @@ class ProdukController extends Controller
         }
 
         $data = $request->only([
-            'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
+            'id_supplier', 'nama_produk', 'kategori', 'image_url', 'harga_beli', 'stok',
         ]);
+        if ($request->has('kategori')) {
+            $data['kategori'] = $request->filled('kategori') ? trim((string) $request->kategori) : null;
+        }
         if ($request->hasFile('image_file')) {
             $data['image_url'] = Storage::disk('public')->url($request->file('image_file')->store('products', 'public'));
         }
