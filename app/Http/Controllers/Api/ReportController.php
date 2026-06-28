@@ -10,6 +10,7 @@ use App\Models\BranchProductStock;
 use App\Models\DetailTransaksi;
 use App\Models\DetailJurnal;
 use App\Models\Jurnal;
+use App\Models\Kasir;
 use App\Models\Pinjaman;
 use App\Models\Produk;
 use App\Models\Simpanan;
@@ -67,6 +68,13 @@ class ReportController extends Controller
                 $query->whereHas('kasir', fn ($q) => $q->where('id_cabang', $cabangScope));
             }
 
+            $cashiers = Kasir::query()
+                ->select(['id_kasir', 'nama_kasir', 'id_cabang'])
+                ->with('cabang:id_cabang,nama_cabang')
+                ->when($cabangScope !== null, fn ($q) => $q->where('id_cabang', $cabangScope))
+                ->orderBy('nama_kasir')
+                ->get();
+
             $transactionIds = (clone $query)->pluck('id_transaksi');
             $totalPenjualan = (float) (clone $query)->sum('total_bayar');
             $totalTransaksi = (clone $query)->count();
@@ -88,6 +96,7 @@ class ReportController extends Controller
                     'id_kasir' => $idKasir ? (int) $idKasir : null,
                     'id_cabang' => $cabangScope,
                 ],
+                'cashiers' => $cashiers,
                 'summary' => [
                     'total_transaksi' => $totalTransaksi,
                     'total_penjualan' => $totalPenjualan,
