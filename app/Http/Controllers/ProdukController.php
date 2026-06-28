@@ -24,7 +24,7 @@ class ProdukController extends Controller
         $limit = min(max((int) $request->integer('limit', 100), 1), 500);
         $isKasir = $request->user()?->role === 'Kasir';
         $query = Produk::query()
-            ->select(['id_produk', 'id_cabang', 'id_supplier', 'nama_produk', 'harga_beli', 'harga_jual', 'stok'])
+            ->select(['id_produk', 'id_cabang', 'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'harga_jual', 'stok'])
             ->with(['supplier:id_supplier,nama_supplier', 'branchStocks.cabang:id_cabang,nama_cabang,lokasi']);
         $cabangScope = $this->resolveCabangScope($request);
 
@@ -65,6 +65,7 @@ class ProdukController extends Controller
                 return [
                     'id_produk' => $item->id_produk,
                     'nama_produk' => $item->nama_produk,
+                    'image_url' => $item->image_url,
                     'harga_jual' => (float) $item->harga_jual,
                     'stok' => $currentStock,
                     'is_low_stock' => $item->is_low_stock,
@@ -91,6 +92,7 @@ class ProdukController extends Controller
             'id_cabang' => 'required|exists:cabangs,id_cabang',
             'id_supplier' => 'required|exists:suppliers,id_supplier',
             'nama_produk' => 'required|string|max:255',
+            'image_url' => 'nullable|string|max:2048',
             'harga_beli' => 'required|numeric|min:0',
             'stok' => 'required|integer|min:0',
         ];
@@ -115,7 +117,7 @@ class ProdukController extends Controller
         }
 
         $data = $request->only([
-            'id_cabang', 'id_supplier', 'nama_produk', 'harga_beli', 'stok',
+            'id_cabang', 'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
         ]);
 
         if ($role === 'Admin' || $role === 'Pengurus') {
@@ -180,6 +182,7 @@ class ProdukController extends Controller
         $rules = [
             'id_supplier' => 'sometimes|exists:suppliers,id_supplier',
             'nama_produk' => 'sometimes|string|max:255',
+            'image_url' => 'sometimes|nullable|string|max:2048',
             'harga_beli' => 'sometimes|numeric|min:0',
             'stok' => 'sometimes|integer|min:0',
         ];
@@ -206,7 +209,7 @@ class ProdukController extends Controller
         }
 
         $data = $request->only([
-            'id_supplier', 'nama_produk', 'harga_beli', 'stok',
+            'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
         ]);
 
         if ($role === 'Admin' || $role === 'Pengurus') {
@@ -243,5 +246,24 @@ class ProdukController extends Controller
         $produk->delete();
 
         return $this->successResponse('Produk berhasil dihapus', null);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:produks,id_produk',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validasi gagal', $validator->errors(), 422);
+        }
+
+        $ids = collect($request->input('ids'))->map(fn ($id) => (int) $id)->unique()->values();
+        $deleted = Produk::query()->whereIn('id_produk', $ids)->delete();
+
+        return $this->successResponse('Produk terpilih berhasil dihapus', [
+            'deleted' => $deleted,
+        ]);
     }
 }

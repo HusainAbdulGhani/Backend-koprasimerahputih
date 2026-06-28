@@ -14,6 +14,7 @@ class Produk extends Model
         'id_cabang',
         'id_supplier',
         'nama_produk',
+        'image_url',
         'harga_beli',
         'harga_jual',
         'stok',

@@ -91,4 +91,32 @@ class SupplierController extends Controller
             return $this->errorResponse('Supplier tidak ditemukan.', null, 404);
         }
     }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:suppliers,id_supplier',
+        ]);
+
+        $suppliersWithProducts = Supplier::query()
+            ->whereIn('id_supplier', $validated['ids'])
+            ->whereHas('produks')
+            ->pluck('nama_supplier')
+            ->values();
+
+        if ($suppliersWithProducts->isNotEmpty()) {
+            return $this->errorResponse(
+                'Tidak bisa menghapus supplier yang masih memiliki produk.',
+                ['suppliers' => $suppliersWithProducts],
+                422
+            );
+        }
+
+        $deleted = Supplier::query()->whereIn('id_supplier', $validated['ids'])->delete();
+
+        return $this->successResponse('Supplier terpilih berhasil dihapus.', [
+            'deleted' => $deleted,
+        ]);
+    }
 }
