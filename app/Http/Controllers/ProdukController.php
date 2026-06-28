@@ -10,6 +10,7 @@ use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class ProdukController extends Controller
@@ -89,12 +90,13 @@ class ProdukController extends Controller
     {
         $role = $request->user()?->role;
         $rules = [
-            'id_cabang' => 'required|exists:cabangs,id_cabang',
+            'id_cabang' => 'nullable|exists:cabangs,id_cabang',
             'id_supplier' => 'required|exists:suppliers,id_supplier',
             'nama_produk' => 'required|string|max:255',
             'image_url' => 'nullable|string|max:2048',
+            'image_file' => 'nullable|image|max:2048',
             'harga_beli' => 'required|numeric|min:0',
-            'stok' => 'required|integer|min:0',
+            'stok' => 'nullable|integer|min:0',
         ];
 
         if ($role === 'Admin' || $role === 'Pengurus') {
@@ -112,13 +114,19 @@ class ProdukController extends Controller
         }
 
         $cabangScope = $this->resolveCabangScope($request);
-        if ($cabangScope !== null && (int) $request->id_cabang !== $cabangScope) {
+        if ($cabangScope !== null && $request->filled('id_cabang') && (int) $request->id_cabang !== $cabangScope) {
             return $this->errorResponse('Produk hanya bisa ditambahkan untuk cabang Anda.', null, 403);
         }
 
         $data = $request->only([
             'id_cabang', 'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
         ]);
+        $data['id_cabang'] = $request->filled('id_cabang') ? (int) $request->id_cabang : null;
+        $data['stok'] = (int) ($request->input('stok', 0));
+
+        if ($request->hasFile('image_file')) {
+            $data['image_url'] = Storage::disk('public')->url($request->file('image_file')->store('products', 'public'));
+        }
 
         if ($role === 'Admin' || $role === 'Pengurus') {
             $data['harga_jual'] = (float) $request->harga_jual;
@@ -133,13 +141,16 @@ class ProdukController extends Controller
             $stockRows = Cabang::query()
                 ->select('id_cabang')
                 ->get()
-                ->map(fn (Cabang $cabang) => [
-                    'id_cabang' => $cabang->id_cabang,
-                    'id_produk' => $produk->id_produk,
-                    'stok' => (int) $cabang->id_cabang === (int) $request->id_cabang ? (int) $request->stok : 0,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ])
+                ->map(function (Cabang $cabang) use ($produk, $request, $now) {
+                    $isInitialBranch = $request->filled('id_cabang') && (int) $cabang->id_cabang === (int) $request->id_cabang;
+                    return [
+                        'id_cabang' => $cabang->id_cabang,
+                        'id_produk' => $produk->id_produk,
+                        'stok' => $isInitialBranch ? (int) $request->input('stok', 0) : 0,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                })
                 ->all();
 
             BranchProductStock::query()->insert($stockRows);
@@ -183,6 +194,7 @@ class ProdukController extends Controller
             'id_supplier' => 'sometimes|exists:suppliers,id_supplier',
             'nama_produk' => 'sometimes|string|max:255',
             'image_url' => 'sometimes|nullable|string|max:2048',
+            'image_file' => 'sometimes|nullable|image|max:2048',
             'harga_beli' => 'sometimes|numeric|min:0',
             'stok' => 'sometimes|integer|min:0',
         ];
@@ -211,6 +223,9 @@ class ProdukController extends Controller
         $data = $request->only([
             'id_supplier', 'nama_produk', 'image_url', 'harga_beli', 'stok',
         ]);
+        if ($request->hasFile('image_file')) {
+            $data['image_url'] = Storage::disk('public')->url($request->file('image_file')->store('products', 'public'));
+        }
 
         if ($role === 'Admin' || $role === 'Pengurus') {
             if ($request->has('harga_jual')) {
