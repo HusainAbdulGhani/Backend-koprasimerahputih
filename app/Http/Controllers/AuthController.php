@@ -40,6 +40,8 @@ class AuthController extends Controller
         // Buat token Sanctum
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        $user->load('roles');
+
         return $this->successResponse('Login berhasil', [
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -47,6 +49,7 @@ class AuthController extends Controller
                 'id_account' => $user->id_account,
                 'username' => $user->username,
                 'role' => $user->role,
+                'available_roles' => $user->availableRoles(),
             ]
         ]);
     }

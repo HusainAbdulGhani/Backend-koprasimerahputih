@@ -35,6 +35,7 @@ class AnggotaController extends Controller
                 'role' => 'Anggota',
                 'email' => $validated['email'],
             ]);
+            $account->syncRoles(['Anggota']);
 
             $anggota = Anggota::create([
                 'id_account' => $account->id_account,

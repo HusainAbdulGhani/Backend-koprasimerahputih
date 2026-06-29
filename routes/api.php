@@ -30,9 +30,19 @@ Route::get('/auth/google/callback', [GoogleAuthController::class, 'handleGoogleC
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/me', function (Request $request) {
-        return response()->json($request->user()->load([
-            'admin', 'pengurus.cabang', 'kasir.cabang', 'gudang.cabang', 'anggota.cabang',
-        ]));
+        $account = $request->user()->load([
+            'roles',
+            'admin',
+            'pengurus.cabang',
+            'kasir.cabang',
+            'gudang.cabang',
+            'anggota.cabang',
+        ]);
+        $account->setAttribute('available_roles', $account->availableRoles());
+        $account->setAttribute('default_role', $account->role);
+        $account->setAttribute('role', $account->resolveActiveRole($request->header('X-Active-Role')));
+
+        return response()->json($account);
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);

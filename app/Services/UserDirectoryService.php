@@ -12,6 +12,7 @@ use App\Services\SimpananPolicyService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class UserDirectoryService
@@ -62,6 +63,8 @@ class UserDirectoryService
                 ]),
             };
 
+            $this->syncAccountRoles($account, [$role]);
+
             return [
                 'account' => $account,
                 'profile' => $profile,
@@ -74,17 +77,48 @@ class UserDirectoryService
      */
     public function createMember(array $data): array
     {
-        $role = $data['role'];
+        $roles = array_values(array_unique($data['roles'] ?? [$data['role'] ?? 'Anggota']));
+        $defaultRole = $data['role'] ?? (collect($roles)->first(fn ($role) => $role !== 'Anggota') ?: $roles[0]);
 
-        return DB::transaction(function () use ($data, $role) {
-            if ($role === 'Anggota') {
-                $account = Account::create([
-                    'username' => $data['username'],
-                    'password' => $data['password'],
-                    'role' => 'Anggota',
-                    'email' => $data['email'] ?? null,
+        return DB::transaction(function () use ($data, $roles, $defaultRole) {
+            $account = Account::create([
+                'username' => $data['username'],
+                'password' => $data['password'],
+                'role' => $defaultRole,
+                'email' => $data['email'] ?? null,
+            ]);
+            $this->syncAccountRoles($account, $roles);
+
+            $profile = null;
+            if (in_array('Admin', $roles, true)) {
+                $profile = Admin::create([
+                    'id_account' => $account->id_account,
+                    'nama_admin' => $data['nama'],
                 ]);
-
+            }
+            if (in_array('Pengurus', $roles, true)) {
+                $profile ??= Pengurus::create([
+                    'id_account' => $account->id_account,
+                    'nama_pengurus' => $data['nama'],
+                    'nip' => $data['nip'] ?? ('PG-'.$account->id_account),
+                    'id_cabang' => $data['id_cabang'],
+                ]);
+            }
+            if (in_array('Kasir', $roles, true)) {
+                $profile ??= Kasir::create([
+                    'id_account' => $account->id_account,
+                    'nama_kasir' => $data['nama'],
+                    'id_cabang' => $data['id_cabang'],
+                ]);
+            }
+            if (in_array('Gudang', $roles, true)) {
+                $profile ??= Gudang::create([
+                    'id_account' => $account->id_account,
+                    'nama_petugas' => $data['nama'],
+                    'id_cabang' => $data['id_cabang'],
+                ]);
+            }
+            if (in_array('Anggota', $roles, true)) {
                 $status = $data['status'] ?? 'Aktif';
                 $anggota = Anggota::create([
                     'id_account' => $account->id_account,
@@ -96,34 +130,48 @@ class UserDirectoryService
                     'tanggal_daftar' => now()->toDateString(),
                     'status' => $status,
                 ]);
-
                 if ($status === 'Aktif') {
                     $anggota->nomor_anggota = 'AGT-'.$anggota->id_cabang.'-'.str_pad((string) $anggota->id_anggota, 6, '0', STR_PAD_LEFT);
                     $anggota->save();
                     app(SimpananPolicyService::class)->ensureSimpananAwal($anggota);
                 }
-
-                return ['account' => $account, 'profile' => $anggota];
+                $profile ??= $anggota;
             }
 
-            if ($role === 'Admin') {
-                $account = Account::create([
-                    'username' => $data['username'],
-                    'password' => $data['password'],
-                    'role' => 'Admin',
-                    'email' => $data['email'] ?? null,
-                ]);
-
-                $admin = Admin::create([
-                    'id_account' => $account->id_account,
-                    'nama_admin' => $data['nama'],
-                ]);
-
-                return ['account' => $account, 'profile' => $admin];
-            }
-
-            return $this->createStaffUser($data);
+            return ['account' => $account, 'profile' => $profile];
         });
+    }
+
+    private function syncAccountRoles(Account $account, array $roles): void
+    {
+        $account->syncRoles($roles);
+    }
+
+    private function ensureMemberProfile(Account $account, string $name, int $idCabang, ?string $email = null): void
+    {
+        if ($account->anggota) {
+            return;
+        }
+
+        $safeUsername = Str::slug($account->username, '-');
+        $memberEmail = $email ?: "anggota-{$account->id_account}-{$safeUsername}@koperasi.local";
+        if (Anggota::query()->where('email', $memberEmail)->exists()) {
+            $memberEmail = "anggota-{$account->id_account}-{$safeUsername}@koperasi.local";
+        }
+        $member = Anggota::create([
+            'id_account' => $account->id_account,
+            'nomor_anggota' => null,
+            'nama_anggota' => $name,
+            'alamat' => '-',
+            'no_hp' => '-',
+            'email' => $memberEmail,
+            'tanggal_daftar' => now()->toDateString(),
+            'status' => 'Aktif',
+            'id_cabang' => $idCabang,
+        ]);
+        $member->nomor_anggota = 'AGT-'.$member->id_cabang.'-'.str_pad((string) $member->id_anggota, 6, '0', STR_PAD_LEFT);
+        $member->save();
+        app(SimpananPolicyService::class)->ensureSimpananAwal($member);
     }
 
     /**
@@ -180,21 +228,34 @@ class UserDirectoryService
 
     public function updateMember(int $idAccount, array $data): array
     {
-        $account = Account::find($idAccount);
+        $account = Account::with(['admin', 'pengurus', 'kasir', 'gudang', 'anggota'])->find($idAccount);
         if (! $account) {
             throw new RuntimeException('Akun tidak ditemukan.');
         }
 
         return DB::transaction(function () use ($account, $data) {
+            $roles = array_values(array_unique($data['roles'] ?? $account->availableRoles()));
+            if (empty($roles)) {
+                throw new RuntimeException('Minimal satu role harus dipilih.');
+            }
+            if ($account->anggota && ! in_array('Anggota', $roles, true)) {
+                throw new RuntimeException('Role Anggota tidak bisa dicabut dari akun yang sudah memiliki profil anggota. Nonaktifkan status anggota jika keanggotaan berhenti.');
+            }
+            $defaultRole = $data['role'] ?? (in_array($account->role, $roles, true)
+                ? $account->role
+                : (collect($roles)->first(fn ($role) => $role !== 'Anggota') ?: $roles[0]));
+
+            $this->ensureProfilesForRoles($account, $roles, $data);
+            $account->role = $defaultRole;
+            $this->syncAccountRoles($account, $roles);
+
             if (! empty($data['password'])) {
                 $account->password = $data['password'];
             }
             if (! empty($data['email'])) {
                 $account->email = $data['email'];
             }
-            if ($account->isDirty()) {
-                $account->save();
-            }
+            $account->save();
 
             $profile = match ($account->role) {
                 'Admin' => $this->updateAdminProfile($account, $data),
@@ -235,9 +296,68 @@ class UserDirectoryService
         });
     }
 
+    private function ensureProfilesForRoles(Account $account, array $roles, array $data): void
+    {
+        $name = $data['nama'] ?? $this->profileName($account);
+
+        if (in_array('Admin', $roles, true) && ! $account->admin) {
+            $account->admin()->create(['nama_admin' => $name]);
+        }
+        if (in_array('Pengurus', $roles, true) && ! $account->pengurus) {
+            $account->pengurus()->create([
+                'nama_pengurus' => $name,
+                'nip' => $data['nip'] ?? ('PG-'.$account->id_account),
+                'id_cabang' => $data['id_cabang'],
+            ]);
+        }
+        if (in_array('Kasir', $roles, true) && ! $account->kasir) {
+            $account->kasir()->create([
+                'nama_kasir' => $name,
+                'id_cabang' => $data['id_cabang'],
+            ]);
+        }
+        if (in_array('Gudang', $roles, true) && ! $account->gudang) {
+            $account->gudang()->create([
+                'nama_petugas' => $name,
+                'id_cabang' => $data['id_cabang'],
+            ]);
+        }
+        if (in_array('Anggota', $roles, true) && ! $account->anggota) {
+            $member = $account->anggota()->create([
+                'nomor_anggota' => null,
+                'nama_anggota' => $name,
+                'alamat' => $data['alamat'],
+                'no_hp' => $data['no_hp'],
+                'email' => $data['email'] ?? $account->email,
+                'tanggal_daftar' => now()->toDateString(),
+                'status' => $this->normalizeStatusInput($data['status'] ?? 'Aktif'),
+                'id_cabang' => $data['id_cabang'],
+            ]);
+            if ($member->status === 'Aktif') {
+                $member->nomor_anggota = 'AGT-'.$member->id_cabang.'-'.str_pad((string) $member->id_anggota, 6, '0', STR_PAD_LEFT);
+                $member->save();
+                app(SimpananPolicyService::class)->ensureSimpananAwal($member);
+            }
+        }
+
+        $account->load(['admin', 'pengurus', 'kasir', 'gudang', 'anggota']);
+    }
+
+    private function profileName(Account $account): string
+    {
+        return $account->admin?->nama_admin
+            ?? $account->pengurus?->nama_pengurus
+            ?? $account->kasir?->nama_kasir
+            ?? $account->gudang?->nama_petugas
+            ?? $account->anggota?->nama_anggota
+            ?? $account->username;
+    }
+
     public function mapAccountToMember(Account $account): array
     {
-        if ($account->admin) {
+        $roles = $account->availableRoles();
+
+        if (in_array('Admin', $roles, true) && $account->admin) {
             return $this->formatMember(
                 idAccount: $account->id_account,
                 idProfile: $account->admin->id_admin,
@@ -247,10 +367,11 @@ class UserDirectoryService
                 peran: 'Admin',
                 status: 'Aktif',
                 telepon: '-',
+                roles: $roles,
             );
         }
 
-        if ($account->pengurus) {
+        if (in_array('Pengurus', $roles, true) && $account->pengurus) {
             $p = $account->pengurus;
 
             return $this->formatMember(
@@ -264,10 +385,11 @@ class UserDirectoryService
                 telepon: '-',
                 idCabang: $p->id_cabang,
                 namaCabang: $p->cabang?->nama_cabang,
+                roles: $roles,
             );
         }
 
-        if ($account->kasir) {
+        if (in_array('Kasir', $roles, true) && $account->kasir) {
             $k = $account->kasir;
 
             return $this->formatMember(
@@ -281,10 +403,11 @@ class UserDirectoryService
                 telepon: '-',
                 idCabang: $k->id_cabang,
                 namaCabang: $k->cabang?->nama_cabang,
+                roles: $roles,
             );
         }
 
-        if ($account->gudang) {
+        if (in_array('Gudang', $roles, true) && $account->gudang) {
             $g = $account->gudang;
 
             return $this->formatMember(
@@ -298,10 +421,11 @@ class UserDirectoryService
                 telepon: '-',
                 idCabang: $g->id_cabang,
                 namaCabang: $g->cabang?->nama_cabang,
+                roles: $roles,
             );
         }
 
-        if ($account->anggota) {
+        if (in_array('Anggota', $roles, true) && $account->anggota) {
             $a = $account->anggota;
 
             return $this->formatMember(
@@ -316,6 +440,7 @@ class UserDirectoryService
                 idCabang: $a->id_cabang,
                 namaCabang: $a->cabang?->nama_cabang,
                 alamat: $a->alamat,
+                roles: $roles,
             );
         }
 
@@ -328,6 +453,7 @@ class UserDirectoryService
             peran: $account->role,
             status: 'Aktif',
             telepon: '-',
+            roles: $roles,
         );
     }
 
@@ -350,6 +476,7 @@ class UserDirectoryService
         ?int $idCabang = null,
         ?string $namaCabang = null,
         ?string $alamat = null,
+        array $roles = [],
     ): array {
         $words = preg_split('/\s+/', trim($nama)) ?: [];
         $inicial = collect($words)->take(2)->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))->implode('');
@@ -369,6 +496,7 @@ class UserDirectoryService
             'id_cabang' => $idCabang,
             'nama_cabang' => $namaCabang,
             'alamat' => $alamat,
+            'roles' => $roles,
             'inicial' => $inicial ?: mb_strtoupper(mb_substr($nama, 0, 2)),
         ];
     }

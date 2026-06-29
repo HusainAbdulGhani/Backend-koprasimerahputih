@@ -26,13 +26,19 @@ class CheckRole
             return $next($request);
         }
 
-        if (! in_array($user->role, $roles, true)) {
+        $activeRole = method_exists($user, 'resolveActiveRole')
+            ? $user->resolveActiveRole($request->header('X-Active-Role'))
+            : $user->role;
+        $user->setAttribute('role', $activeRole);
+
+        if (! in_array($activeRole, $roles, true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Forbidden. Role tidak diizinkan.',
                 'data' => [
                     'required_roles' => $roles,
-                    'current_role' => $user->role,
+                    'current_role' => $activeRole,
+                    'available_roles' => method_exists($user, 'availableRoles') ? $user->availableRoles() : [$user->role],
                 ],
                 'code' => 403,
             ], 403);

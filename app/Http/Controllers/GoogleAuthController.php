@@ -45,6 +45,7 @@ class GoogleAuthController extends Controller
                     'role' => 'Anggota',
                     'email' => $email,
                 ]);
+                $account->syncRoles(['Anggota']);
 
                 // Assign to the first branch as default
                 $cabang = Cabang::first();

@@ -21,6 +21,7 @@ class MemberDirectoryResource extends JsonResource
             'telepon' => $this->resource['telepon'],
             'id_cabang' => $this->resource['id_cabang'] ?? null,
             'nama_cabang' => $this->resource['nama_cabang'] ?? null,
+            'roles' => $this->resource['roles'] ?? [$this->resource['peran']],
             'inicial' => $this->resource['inicial'],
         ];
     }
