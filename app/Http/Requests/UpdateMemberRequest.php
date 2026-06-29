@@ -29,22 +29,33 @@ class UpdateMemberRequest extends BaseApiRequest
             'roles.*' => ['required', 'in:Admin,Pengurus,Kasir,Gudang,Anggota'],
             'id_cabang' => ['sometimes', 'integer', 'exists:cabangs,id_cabang'],
             'nip' => ['sometimes', 'string', 'max:50', Rule::unique('pengurus', 'nip')->ignore($idAccount, 'id_account')],
-            'email' => ['sometimes', 'email', 'max:255'],
+            'email' => ['sometimes', 'email', 'max:255', Rule::unique('accounts', 'email')->ignore($idAccount, 'id_account')],
             'alamat' => ['sometimes', 'string'],
             'no_hp' => ['sometimes', 'string', 'max:15'],
             'status' => ['sometimes', 'in:Calon,Aktif,Non-Aktif,Tertunda,Tidak Aktif'],
         ];
 
-        if (array_intersect($roles, ['Pengurus', 'Kasir', 'Gudang', 'Anggota'])) {
+        if (array_intersect($roles, ['Pengurus', 'Kasir', 'Anggota'])) {
             $rules['id_cabang'] = ['required', 'integer', 'exists:cabangs,id_cabang'];
         }
 
         if (in_array('Anggota', $roles, true) && ! $account?->anggota) {
-            $rules['email'] = ['required', 'email', 'max:255', 'unique:anggotas,email'];
+            $rules['email'] = ['required', 'email', 'max:255', Rule::unique('accounts', 'email')->ignore($idAccount, 'id_account'), 'unique:anggotas,email'];
             $rules['alamat'] = ['required', 'string'];
             $rules['no_hp'] = ['required', 'string', 'max:15'];
+        } elseif (in_array('Anggota', $roles, true)) {
+            $rules['email'] = ['sometimes', 'email', 'max:255', Rule::unique('accounts', 'email')->ignore($idAccount, 'id_account'), Rule::unique('anggotas', 'email')->ignore($account?->anggota?->id_anggota, 'id_anggota')];
         }
 
         return $rules;
+    }
+
+    public function messages(): array
+    {
+        return [
+            'email.unique' => 'Email sudah digunakan. Gunakan email lain.',
+            'id_cabang.required' => 'Cabang wajib dipilih untuk peran ini.',
+            'roles.min' => 'Pilih minimal satu peran koperasi.',
+        ];
     }
 }

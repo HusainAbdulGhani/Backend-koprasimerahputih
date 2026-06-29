@@ -34,7 +34,7 @@ class AuthController extends Controller
 
         // Cek apakah user ada dan passwordnya benar
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->errorResponse('Kredensial tidak valid', null, 401);
+            return $this->errorResponse('Username atau password salah.', null, 401);
         }
 
         // Buat token Sanctum

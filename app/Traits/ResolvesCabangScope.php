@@ -18,14 +18,13 @@ trait ResolvesCabangScope
             return null;
         }
 
-        if ($user->role === 'Admin') {
+        if ($user->role === 'Admin' || $user->role === 'Gudang') {
             return $request->filled('id_cabang') ? (int) $request->query('id_cabang') : null;
         }
 
         return match ($user->role) {
             'Pengurus' => $user->pengurus?->id_cabang,
             'Kasir' => $user->kasir?->id_cabang,
-            'Gudang' => $user->gudang?->id_cabang,
             'Anggota' => $user->anggota?->id_cabang,
             default => null,
         };

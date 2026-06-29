@@ -22,9 +22,10 @@ class StoreMemberRequest extends BaseApiRequest
             'roles' => ['nullable', 'required_without:role', 'array', 'min:1'],
             'roles.*' => ['required', 'in:Admin,Pengurus,Kasir,Gudang,Anggota'],
             'nama' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:accounts,email'],
         ];
 
-        if (array_intersect($roles, ['Pengurus', 'Kasir', 'Gudang', 'Anggota'])) {
+        if (array_intersect($roles, ['Pengurus', 'Kasir', 'Anggota'])) {
             $rules['id_cabang'] = ['required', 'integer', 'exists:cabangs,id_cabang'];
         }
 
@@ -33,12 +34,23 @@ class StoreMemberRequest extends BaseApiRequest
         }
 
         if (in_array('Anggota', $roles, true)) {
-            $rules['email'] = ['required', 'email', 'max:255', 'unique:anggotas,email'];
+            $rules['email'] = ['required', 'email', 'max:255', 'unique:accounts,email', 'unique:anggotas,email'];
             $rules['alamat'] = ['required', 'string'];
             $rules['no_hp'] = ['required', 'string', 'max:15'];
             $rules['status'] = ['nullable', 'in:Calon,Aktif,Non-Aktif'];
         }
 
         return $rules;
+    }
+
+    public function messages(): array
+    {
+        return [
+            'email.unique' => 'Email sudah digunakan. Gunakan email lain.',
+            'username.unique' => 'Username sudah digunakan. Gunakan username lain.',
+            'id_cabang.required' => 'Cabang wajib dipilih untuk peran ini.',
+            'roles.required_without' => 'Pilih minimal satu peran koperasi.',
+            'role.required_without' => 'Pilih minimal satu peran koperasi.',
+        ];
     }
 }

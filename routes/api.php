@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AccountSettingsController;
 use App\Http\Controllers\AdminMemberController;
 use App\Http\Controllers\PinjamanController;
 use App\Http\Controllers\TransactionController;
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\Route;
 
 // --- PUBLIC ---
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/forgot-password', [AccountSettingsController::class, 'forgotPassword']);
+Route::post('/reset-password', [AccountSettingsController::class, 'resetPassword']);
 Route::post('/anggota/register', [AnggotaController::class, 'register']);
 Route::get('/cabangs', [CabangController::class, 'index']);
 Route::get('/auth/google', [GoogleAuthController::class, 'redirectToGoogle']);
@@ -46,6 +49,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::patch('/settings/profile', [AccountSettingsController::class, 'updateProfile']);
+    Route::patch('/settings/password', [AccountSettingsController::class, 'changePassword']);
     Route::post('/simpanans', [SimpananController::class, 'store'])
         ->middleware('role:Anggota,Pengurus,Admin');
 

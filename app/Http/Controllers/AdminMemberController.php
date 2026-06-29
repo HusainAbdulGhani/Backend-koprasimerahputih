@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\AccountUpdated;
 use App\Http\Requests\StoreMemberRequest;
 use App\Http\Requests\UpdateMemberRequest;
 use App\Http\Resources\MemberDirectoryResource;
@@ -65,6 +66,10 @@ class AdminMemberController extends Controller
                 201
             );
         } catch (\Throwable $e) {
+            if (str_contains($e->getMessage(), 'Duplicate entry') || str_contains($e->getMessage(), 'Integrity constraint violation')) {
+                return $this->errorResponse('Gagal menambah pengguna.', 'Data sudah digunakan. Periksa kembali email atau username.', 422);
+            }
+
             return $this->errorResponse('Gagal menambah pengguna.', $e->getMessage(), 422);
         }
     }
@@ -73,12 +78,17 @@ class AdminMemberController extends Controller
     {
         try {
             $result = $this->userDirectory->updateMember($id_account, $request->validated());
+            broadcast(new AccountUpdated('updated', $result['account']->fresh(['roles', 'anggota'])));
 
             return $this->successResponse(
                 'Data pengguna berhasil diperbarui.',
                 new MemberDirectoryResource($result['member'])
             );
         } catch (\Throwable $e) {
+            if (str_contains($e->getMessage(), 'Duplicate entry') || str_contains($e->getMessage(), 'Integrity constraint violation')) {
+                return $this->errorResponse('Gagal memperbarui pengguna.', 'Data sudah digunakan. Periksa kembali email atau username.', 422);
+            }
+
             return $this->errorResponse('Gagal memperbarui pengguna.', $e->getMessage(), 422);
         }
     }

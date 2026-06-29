@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\AccountUpdated;
 use App\Http\Requests\ActivateAnggotaRequest;
 use App\Http\Requests\RegisterAnggotaRequest;
 use App\Http\Requests\UpdateAnggotaRequest;
@@ -241,6 +242,7 @@ class AnggotaController extends Controller
         // Format to match expected frontend structure
         $service = app(UserDirectoryService::class);
         $mapped = $service->mapAccountToMember($anggota->account);
+        broadcast(new AccountUpdated('updated', $anggota->account->fresh(['roles', 'anggota'])));
 
         return $this->successResponse('Data anggota berhasil diperbarui.', $mapped);
     }
@@ -312,6 +314,7 @@ class AnggotaController extends Controller
 
         $service = app(UserDirectoryService::class);
         $mapped = $service->mapAccountToMember($result->account);
+        broadcast(new AccountUpdated('approved', $result->account->fresh(['roles', 'anggota'])));
 
         return $this->successResponse('Anggota berhasil disetujui.', $mapped);
     }
@@ -340,6 +343,7 @@ class AnggotaController extends Controller
 
         $service = app(UserDirectoryService::class);
         $mapped = $service->mapAccountToMember($anggota->account);
+        broadcast(new AccountUpdated('rejected', $anggota->account->fresh(['roles', 'anggota'])));
 
         return $this->successResponse('Pendaftaran anggota berhasil ditolak.', $mapped);
     }

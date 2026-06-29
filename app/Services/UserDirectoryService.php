@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Account;
 use App\Models\Admin;
 use App\Models\Anggota;
+use App\Models\Cabang;
 use App\Models\Gudang;
 use App\Models\Kasir;
 use App\Models\Pengurus;
@@ -59,7 +60,7 @@ class UserDirectoryService
                 'Gudang' => Gudang::create([
                     'id_account' => $account->id_account,
                     'nama_petugas' => $data['nama'],
-                    'id_cabang' => $data['id_cabang'],
+                    'id_cabang' => $data['id_cabang'] ?? $this->fallbackCabangId(),
                 ]),
             };
 
@@ -97,26 +98,29 @@ class UserDirectoryService
                 ]);
             }
             if (in_array('Pengurus', $roles, true)) {
-                $profile ??= Pengurus::create([
+                $pengurus = Pengurus::create([
                     'id_account' => $account->id_account,
                     'nama_pengurus' => $data['nama'],
                     'nip' => $data['nip'] ?? ('PG-'.$account->id_account),
                     'id_cabang' => $data['id_cabang'],
                 ]);
+                $profile ??= $pengurus;
             }
             if (in_array('Kasir', $roles, true)) {
-                $profile ??= Kasir::create([
+                $kasir = Kasir::create([
                     'id_account' => $account->id_account,
                     'nama_kasir' => $data['nama'],
                     'id_cabang' => $data['id_cabang'],
                 ]);
+                $profile ??= $kasir;
             }
             if (in_array('Gudang', $roles, true)) {
-                $profile ??= Gudang::create([
+                $gudang = Gudang::create([
                     'id_account' => $account->id_account,
                     'nama_petugas' => $data['nama'],
-                    'id_cabang' => $data['id_cabang'],
+                    'id_cabang' => $data['id_cabang'] ?? $this->fallbackCabangId(),
                 ]);
+                $profile ??= $gudang;
             }
             if (in_array('Anggota', $roles, true)) {
                 $status = $data['status'] ?? 'Aktif';
@@ -145,6 +149,16 @@ class UserDirectoryService
     private function syncAccountRoles(Account $account, array $roles): void
     {
         $account->syncRoles($roles);
+    }
+
+    private function fallbackCabangId(): int
+    {
+        $idCabang = Cabang::query()->value('id_cabang');
+        if (! $idCabang) {
+            throw new RuntimeException('Cabang default belum tersedia.');
+        }
+
+        return (int) $idCabang;
     }
 
     private function ensureMemberProfile(Account $account, string $name, int $idCabang, ?string $email = null): void
@@ -319,7 +333,7 @@ class UserDirectoryService
         if (in_array('Gudang', $roles, true) && ! $account->gudang) {
             $account->gudang()->create([
                 'nama_petugas' => $name,
-                'id_cabang' => $data['id_cabang'],
+                'id_cabang' => $data['id_cabang'] ?? $this->fallbackCabangId(),
             ]);
         }
         if (in_array('Anggota', $roles, true) && ! $account->anggota) {
