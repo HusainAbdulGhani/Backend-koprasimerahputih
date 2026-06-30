@@ -52,6 +52,8 @@ class AnggotaController extends Controller
             return $anggota->load(['account', 'cabang']);
         });
 
+        broadcast(new AccountUpdated('registered', $result->account->fresh(['roles', 'anggota'])));
+
         return $this->successResponse(
             'Pendaftaran berhasil. Menunggu persetujuan admin.',
             new AnggotaResource($result),
@@ -175,6 +177,7 @@ class AnggotaController extends Controller
             $member = $service->mapAccountToMember($result['account']->load([
                 'admin', 'pengurus.cabang', 'kasir.cabang', 'gudang.cabang', 'anggota.cabang'
             ]));
+            broadcast(new AccountUpdated('created', $result['account']->fresh(['roles', 'anggota'])));
 
             return $this->successResponse('Pengguna berhasil ditambahkan.', $member, 201);
         } catch (\Throwable $e) {
