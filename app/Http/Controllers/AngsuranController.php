@@ -27,6 +27,15 @@ class AngsuranController extends Controller
             'bukti_transfer' => 'required|file|mimes:jpg,png,jpeg,pdf|max:2048',
         ]);
 
+        $pinjaman = Pinjaman::findOrFail($request->id_pinjaman);
+        $user = $request->user();
+        if ($user?->role === 'Anggota') {
+            $anggota = $user->anggota;
+            if (! $anggota || (int) $pinjaman->id_anggota !== (int) $anggota->id_anggota) {
+                return $this->errorResponse('Anda tidak punya akses ke pinjaman ini.', null, 403);
+            }
+        }
+
         $path = $request->file('bukti_transfer')->store('bukti_pembayaran', 'public');
 
         $angsuran = Angsuran::create([
@@ -214,6 +223,13 @@ class AngsuranController extends Controller
     public function checkSisa($id_pinjaman)
     {
         $pinjaman = Pinjaman::findOrFail($id_pinjaman);
+        $user = request()->user();
+        if ($user?->role === 'Anggota') {
+            $anggota = $user->anggota;
+            if (! $anggota || (int) $pinjaman->id_anggota !== (int) $anggota->id_anggota) {
+                return $this->errorResponse('Anda tidak punya akses ke pinjaman ini.', null, 403);
+            }
+        }
         
         $lastVerified = Angsuran::where('id_pinjaman', $id_pinjaman)
             ->where('status', 'Verified')
