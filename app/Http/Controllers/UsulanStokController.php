@@ -8,6 +8,8 @@ use App\Models\BranchProductStock;
 use App\Models\Cabang;
 use App\Models\Gudang;
 use App\Models\UsulanStok;
+use App\Services\JurnalService;
+use App\Services\KoperasiFinanceService;
 use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
@@ -191,6 +193,22 @@ class UsulanStokController extends Controller
             $pengurus = $request->user()?->pengurus;
             if (! $pengurus && $request->user()?->role !== 'Admin') return $this->errorResponse('Akun pengurus tidak valid.', null, 403);
 
+            if ($approve) {
+                $totalEstimasi = (float) $rows->sum(fn ($row) => (float) $row->jumlah * (float) $row->harga_beli);
+                $kasTersedia = app(KoperasiFinanceService::class)->kasTersedia((int) $first->id_cabang);
+
+                if ($kasTersedia < $totalEstimasi) {
+                    return $this->errorResponse(
+                        'Kas cabang tidak cukup untuk menyetujui pembelian stok ini.',
+                        [
+                            'kas_tersedia' => $kasTersedia,
+                            'total_estimasi' => $totalEstimasi,
+                        ],
+                        422
+                    );
+                }
+            }
+
             foreach ($rows as $row) {
                 $row->id_pengurus_acc = $pengurus?->id_pengurus;
                 $row->status = $approve ? 'Approved' : 'Rejected';
@@ -199,6 +217,14 @@ class UsulanStokController extends Controller
                 $row->alasan_penolakan = $approve ? null : $request->input('alasan_penolakan');
                 if ($approve && $request->filled('harga_jual')) $row->harga_jual = $request->input('harga_jual');
                 $row->save();
+            }
+
+            if ($approve) {
+                app(JurnalService::class)->catatPembelianStokDisetujui(
+                    (int) $first->id_cabang,
+                    (string) ($first->kode_usulan ?: 'LEGACY-'.$first->id_usulan),
+                    (float) $rows->sum(fn ($row) => (float) $row->jumlah * (float) $row->harga_beli)
+                );
             }
 
             $loadedRows = $rows->load(['produk:id_produk,nama_produk', 'supplier:id_supplier,nama_supplier', 'cabang:id_cabang,nama_cabang', 'gudang:id_gudang,nama_petugas,id_cabang']);

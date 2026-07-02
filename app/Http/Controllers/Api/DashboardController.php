@@ -10,6 +10,7 @@ use App\Models\Pinjaman;
 use App\Models\Produk;
 use App\Models\Simpanan;
 use App\Models\UsulanStok;
+use App\Services\KoperasiFinanceService;
 use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,9 @@ class DashboardController extends Controller
                 'total_anggota' => $anggotaQuery->count(),
                 'anggota_aktif' => (clone $anggotaQuery)->where('status', 'Aktif')->count(),
                 'total_simpanan' => (float) $simpananQuery->sum('jumlah'),
+                'kas_tersedia' => app(KoperasiFinanceService::class)->kasTersedia($cabangScope),
+                'total_pinjaman_aktif' => app(KoperasiFinanceService::class)->totalPinjamanAktif($cabangScope),
+                'total_pinjaman_disetujui' => app(KoperasiFinanceService::class)->totalPinjamanDisetujui($cabangScope),
             ];
 
             $alerts = [
