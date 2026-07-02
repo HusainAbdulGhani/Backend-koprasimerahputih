@@ -16,6 +16,7 @@ use App\Models\Simpanan;
 use App\Models\Pinjaman;
 use App\Models\UsulanStok;
 use App\Models\BranchProductStock;
+use App\Services\JurnalService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -63,6 +64,14 @@ class DatabaseSeeder extends Seeder
                 ['nama_akun' => $item['nama_akun']],
                 ['jenis' => $item['jenis']]
             );
+        }
+
+        $modalAwal = (float) config('koperasi.kas_awal_cabang', 50000000);
+        foreach (Cabang::all() as $cb) {
+            $keterangan = 'Modal Awal Koperasi Cabang #'.$cb->id_cabang;
+            if (! \App\Models\Jurnal::where('id_cabang', $cb->id_cabang)->where('keterangan', $keterangan)->exists()) {
+                app(JurnalService::class)->catatModalAwalCabang((int) $cb->id_cabang, $modalAwal, $keterangan);
+            }
         }
 
         $accAdmin = Account::firstOrCreate(

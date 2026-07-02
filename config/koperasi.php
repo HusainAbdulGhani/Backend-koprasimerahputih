@@ -38,6 +38,10 @@ return [
 
     'kasir_per_cabang' => 2,
 
+    // Modal operasional awal per cabang. Dipakai untuk simulasi program koperasi
+    // agar cabang punya kas pembuka sebelum simpanan/penjualan berjalan.
+    'kas_awal_cabang' => 50000000,
+
     'roles' => ['Admin', 'Pengurus', 'Kasir', 'Gudang', 'Anggota'],
 
     'anggota_status' => ['Calon', 'Aktif', 'Non-Aktif'],

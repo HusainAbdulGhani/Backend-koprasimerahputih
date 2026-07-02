@@ -37,7 +37,9 @@ class PinjamanService
             throw new RuntimeException('Anda masih memiliki pengajuan pinjaman yang menunggu verifikasi.');
         }
 
-        $totalSimpanan = (float) Simpanan::where('id_anggota', $anggota->id_anggota)->sum('jumlah');
+        $totalSimpanan = (float) Simpanan::where('id_anggota', $anggota->id_anggota)
+            ->where('status', 'Verified')
+            ->sum('jumlah');
         $activeLoans = Pinjaman::where('id_anggota', $anggota->id_anggota)
             ->where('status', 'Approved')
             ->get();

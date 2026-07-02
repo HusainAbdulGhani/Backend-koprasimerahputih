@@ -7,6 +7,7 @@ use App\Http\Requests\StorePinjamanRequest;
 use App\Http\Resources\PinjamanResource;
 use App\Models\Angsuran;
 use App\Models\Pinjaman;
+use App\Services\KoperasiFinanceService;
 use App\Services\PinjamanService;
 use App\Traits\ApiResponse;
 use App\Traits\ResolvesCabangScope;
@@ -167,6 +168,22 @@ class PinjamanController extends Controller
             if ($cabangScope !== null && $pinjaman->anggota?->id_cabang !== $cabangScope) {
                 DB::rollBack();
                 return $this->errorResponse('Pinjaman ini bukan dari cabang Anda.', null, 403);
+            }
+
+            $idCabang = (int) $pinjaman->anggota?->id_cabang;
+            $kasTersedia = app(KoperasiFinanceService::class)->kasTersedia($idCabang);
+            $nominalPinjaman = (float) $pinjaman->jumlah_pinjaman;
+
+            if ($kasTersedia < $nominalPinjaman) {
+                DB::rollBack();
+                return $this->errorResponse(
+                    'Kas cabang tidak cukup untuk mencairkan pinjaman ini.',
+                    [
+                        'kas_tersedia' => $kasTersedia,
+                        'nominal_pinjaman' => $nominalPinjaman,
+                    ],
+                    422
+                );
             }
 
             $pinjaman->status = 'Approved';

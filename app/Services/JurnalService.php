@@ -100,6 +100,42 @@ class JurnalService
         );
     }
 
+    public function catatModalAwalCabang(int $idCabang, float $nominal, ?string $keterangan = null): void
+    {
+        if ($nominal <= 0) {
+            return;
+        }
+
+        $this->buatJurnalDoubleEntry(
+            idCabang: $idCabang,
+            tanggal: now()->toDateString(),
+            keterangan: $keterangan ?: 'Modal Awal Koperasi Cabang #'.$idCabang,
+            nominal: $nominal,
+            debitNamaAkun: 'Kas',
+            debitJenis: 'Aset',
+            kreditNamaAkun: 'Modal Awal Koperasi',
+            kreditJenis: 'Modal'
+        );
+    }
+
+    public function catatPembelianStokDisetujui(int $idCabang, string $kodeUsulan, float $nominal): void
+    {
+        if ($nominal <= 0) {
+            return;
+        }
+
+        $this->buatJurnalDoubleEntry(
+            idCabang: $idCabang,
+            tanggal: now()->toDateString(),
+            keterangan: 'Pembelian Stok Usulan '.$kodeUsulan,
+            nominal: $nominal,
+            debitNamaAkun: 'Persediaan Barang',
+            debitJenis: 'Aset',
+            kreditNamaAkun: 'Kas',
+            kreditJenis: 'Aset'
+        );
+    }
+
     private function buatJurnalDoubleEntry(
         int $idCabang,
         mixed $tanggal,
