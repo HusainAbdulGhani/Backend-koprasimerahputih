@@ -82,12 +82,20 @@ class TransactionController extends Controller
     /**
      * Struk / detail transaksi untuk keperluan cetak.
      */
-    public function receipt(int $id_transaksi): JsonResponse
+    public function receipt(Request $request, int $id_transaksi): JsonResponse
     {
         try {
             $transaksi = TransaksiPos::with(['kasir.cabang', 'detailTransaksi.produk'])->find($id_transaksi);
             if (! $transaksi) {
                 return $this->errorResponse('Transaksi tidak ditemukan.', null, 404);
+            }
+
+            $user = $request->user();
+            if ($user?->role === 'Kasir') {
+                $kasir = $user->kasir;
+                if (! $kasir || (int) $transaksi->id_kasir !== (int) $kasir->id_kasir) {
+                    return $this->errorResponse('Anda tidak punya akses ke struk transaksi ini.', null, 403);
+                }
             }
 
             return $this->successResponse(
