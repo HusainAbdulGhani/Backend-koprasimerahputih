@@ -22,7 +22,7 @@ class AccountSettingsController extends Controller
         $role = $account->resolveActiveRole($request->header('X-Active-Role'));
 
         $emailRules = [
-            'nullable',
+            $role === 'Anggota' ? 'required' : 'nullable',
             'email',
             'max:255',
             Rule::unique('accounts', 'email')->ignore($account->id_account, 'id_account'),
@@ -34,14 +34,17 @@ class AccountSettingsController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => $emailRules,
-            'phone' => ['nullable', 'string', 'max:20'],
-            'address' => ['nullable', 'string', 'max:1000'],
+            'phone' => [$role === 'Anggota' ? 'required' : 'nullable', 'string', 'max:20'],
+            'address' => [$role === 'Anggota' ? 'required' : 'nullable', 'string', 'max:1000'],
             'profile_photo' => ['nullable', 'string'],
         ], [
             'name.required' => 'Nama lengkap wajib diisi.',
+            'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah digunakan. Gunakan email lain.',
+            'phone.required' => 'Nomor telepon wajib diisi.',
             'phone.max' => 'Nomor telepon terlalu panjang.',
+            'address.required' => 'Alamat lengkap wajib diisi.',
             'address.max' => 'Alamat terlalu panjang.',
         ]);
 
@@ -155,9 +158,15 @@ class AccountSettingsController extends Controller
         }
 
         $anggota->nama_anggota = $data['name'];
-        $anggota->email = $data['email'] ?? $anggota->email;
-        $anggota->no_hp = $data['phone'] ?? $anggota->no_hp;
-        $anggota->alamat = $data['address'] ?? $anggota->alamat;
+        if (array_key_exists('email', $data)) {
+            $anggota->email = $data['email'];
+        }
+        if (array_key_exists('phone', $data)) {
+            $anggota->no_hp = $data['phone'];
+        }
+        if (array_key_exists('address', $data)) {
+            $anggota->alamat = $data['address'];
+        }
         $anggota->save();
     }
 
