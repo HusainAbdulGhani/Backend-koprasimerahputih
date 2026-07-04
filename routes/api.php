@@ -81,6 +81,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:Anggota')->group(function () {
         Route::get('/portal', [PortalAnggotaController::class, 'dashboard']);
         Route::get('/portal/transaksi', [PortalAnggotaController::class, 'riwayatTransaksi']);
+        Route::get('/portal/poin', [PortalAnggotaController::class, 'riwayatPoin']);
         Route::get('/portal/me', [AnggotaController::class, 'me']);
         Route::get('/simpanans', [SimpananController::class, 'index']);
         Route::get('/simpanans/rules', [SimpananController::class, 'rules']);

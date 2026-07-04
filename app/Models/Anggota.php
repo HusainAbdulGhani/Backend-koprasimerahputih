@@ -19,6 +19,7 @@ class Anggota extends Model
         'email',
         'tanggal_daftar',
         'status',
+        'poin',
         'id_cabang',
     ];
 
@@ -67,5 +68,10 @@ class Anggota extends Model
     public function transaksiPos()
     {
         return $this->hasMany(TransaksiPos::class, 'id_anggota', 'id_anggota');
+    }
+
+    public function riwayatPoin()
+    {
+        return $this->hasMany(RiwayatPoin::class, 'id_anggota', 'id_anggota');
     }
 }

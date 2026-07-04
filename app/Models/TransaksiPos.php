@@ -16,6 +16,9 @@ class TransaksiPos extends Model
         'tanggal_jam',
         'total_bayar',
         'ppn',
+        'poin_earned',
+        'poin_redeemed',
+        'potongan_poin',
     ];
 
     protected function casts(): array
@@ -38,5 +41,10 @@ class TransaksiPos extends Model
     public function detailTransaksi()
     {
         return $this->hasMany(DetailTransaksi::class, 'id_transaksi', 'id_transaksi');
+    }
+
+    public function riwayatPoin()
+    {
+        return $this->hasMany(RiwayatPoin::class, 'id_transaksi', 'id_transaksi');
     }
 }

@@ -50,7 +50,7 @@ class TransactionController extends Controller
     {
         $limit = min(max((int) $request->integer('limit', 50), 1), 100);
         $query = Anggota::query()
-            ->select(['id_anggota', 'nomor_anggota', 'nama_anggota', 'id_cabang', 'status'])
+            ->select(['id_anggota', 'nomor_anggota', 'nama_anggota', 'no_hp', 'id_cabang', 'status', 'poin'])
             ->where('status', 'Aktif');
 
         $cabangScope = $this->resolveCabangScope($request);
@@ -61,8 +61,9 @@ class TransactionController extends Controller
         if ($request->filled('search')) {
             $search = trim((string) $request->query('search'));
             $query->where(function ($q) use ($search) {
-                $q->where('nama_anggota', 'like', '%'.$search.'%')
-                    ->orWhere('nomor_anggota', 'like', '%'.$search.'%');
+                $q->where('nomor_anggota', 'like', '%'.$search.'%')
+                    ->orWhere('no_hp', 'like', '%'.$search.'%')
+                    ->orWhere('nama_anggota', 'like', '%'.$search.'%');
             });
         }
 
@@ -74,6 +75,8 @@ class TransactionController extends Controller
                 'id_anggota' => $anggota->id_anggota,
                 'nomor_anggota' => $anggota->nomor_anggota,
                 'nama_anggota' => $anggota->nama_anggota,
+                'no_hp' => $anggota->no_hp,
+                'poin' => (int) ($anggota->poin ?? 0),
             ]);
 
         return $this->successResponse('Daftar anggota aktif POS', $members);

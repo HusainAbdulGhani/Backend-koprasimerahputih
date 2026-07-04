@@ -16,6 +16,7 @@ class CheckoutRequest extends BaseApiRequest
             'id_anggota' => ['nullable', 'integer', 'exists:anggotas,id_anggota'],
             'tanggal_jam' => ['nullable', 'date'],
             'ppn' => ['nullable', 'numeric', 'min:0'],
+            'poin_yang_diredeem' => ['nullable', 'integer', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id_produk' => ['required', 'integer', 'exists:produks,id_produk'],
             'items.*.jumlah' => ['required', 'integer', 'min:1'],

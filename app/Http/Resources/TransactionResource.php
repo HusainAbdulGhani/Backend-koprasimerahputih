@@ -57,6 +57,10 @@ class TransactionResource extends JsonResource
             'total_bayar' => (float) $this->total_bayar,
             'total_bayar_rupiah' => 'Rp '.number_format((float) $this->total_bayar, 0, ',', '.'),
             'ppn' => (float) $this->ppn,
+            'poin_earned' => (int) ($this->poin_earned ?? 0),
+            'poin_redeemed' => (int) ($this->poin_redeemed ?? 0),
+            'potongan_poin' => (float) ($this->potongan_poin ?? 0),
+            'potongan_poin_rupiah' => 'Rp '.number_format((float) ($this->potongan_poin ?? 0), 0, ',', '.'),
             'details' => $details instanceof \Illuminate\Support\Collection ? $details->values() : $details,
         ];
     }

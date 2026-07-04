@@ -129,4 +129,32 @@ class PortalAnggotaController extends Controller
             TransactionResource::collection($transaksi)
         );
     }
+
+    public function riwayatPoin(Request $request): JsonResponse
+    {
+        $anggota = $request->user()?->anggota;
+        if (! $anggota) {
+            return $this->errorResponse('Profil anggota tidak ditemukan.', null, 404);
+        }
+
+        $riwayat = \App\Models\RiwayatPoin::where('id_anggota', $anggota->id_anggota)
+            ->orderByDesc('id_riwayat')
+            ->get()
+            ->map(fn ($r) => [
+                'id_riwayat' => $r->id_riwayat,
+                'id_anggota' => $r->id_anggota,
+                'id_transaksi' => $r->id_transaksi,
+                'tipe' => $r->tipe,
+                'poin' => $r->poin,
+                'nilai_rupiah' => $r->nilai_rupiah,
+                'nilai_rupiah_formatted' => 'Rp ' . number_format($r->nilai_rupiah, 0, ',', '.'),
+                'tanggal_jam' => $r->tanggal_jam ? $r->tanggal_jam->format('Y-m-d H:i:s') : null,
+                'keterangan' => $r->keterangan,
+            ]);
+
+        return $this->successResponse(
+            'Riwayat poin berhasil diambil.',
+            $riwayat
+        );
+    }
 }

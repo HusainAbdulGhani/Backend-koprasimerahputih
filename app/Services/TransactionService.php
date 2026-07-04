@@ -102,8 +102,50 @@ class TransactionService
                 ];
             }
 
+            $poinRedeemed = isset($data['poin_yang_diredeem']) ? (int) $data['poin_yang_diredeem'] : 0;
+            $potonganPoin = 0.0;
+            $anggota = null;
+
+            if ($poinRedeemed > 0) {
+                if (empty($data['id_anggota'])) {
+                    throw new RuntimeException('Anggota harus dipilih untuk melakukan redeem poin.');
+                }
+                $anggota = \App\Models\Anggota::find($data['id_anggota']);
+                if (!$anggota) {
+                    throw new RuntimeException('Anggota tidak ditemukan.');
+                }
+                if ($anggota->status !== 'Aktif') {
+                    throw new RuntimeException('Anggota tidak aktif.');
+                }
+                if ($poinRedeemed < 100) {
+                    throw new RuntimeException('Minimal redeem adalah 100 poin.');
+                }
+                if ($anggota->poin < $poinRedeemed) {
+                    throw new RuntimeException('Poin anggota tidak mencukupi untuk diredeem (Poin saat ini: ' . $anggota->poin . ').');
+                }
+
+                $potonganPoin = $poinRedeemed * 100.0;
+                
+                // Potongan tidak boleh melebihi subtotal + ppn
+                $tempTotal = $subTotal + (isset($data['ppn']) ? (float) $data['ppn'] : round($subTotal * 0.11));
+                if ($potonganPoin > $tempTotal) {
+                    throw new RuntimeException('Potongan poin tidak boleh melebihi total bayar.');
+                }
+            }
+
             $ppn = isset($data['ppn']) ? (float) $data['ppn'] : round($subTotal * 0.11);
-            $totalBayar = $subTotal + $ppn;
+            $totalBayar = ($subTotal + $ppn) - $potonganPoin;
+
+            // Hitung poin yang diperoleh dari transaksi: 1 poin per kelipatan Rp10.000 dari subtotal belanja
+            $poinEarned = 0;
+            if (!empty($data['id_anggota'])) {
+                if (!$anggota) {
+                    $anggota = \App\Models\Anggota::find($data['id_anggota']);
+                }
+                if ($anggota && $anggota->status === 'Aktif') {
+                    $poinEarned = (int) floor($subTotal / 10000);
+                }
+            }
 
             $transaksi = TransaksiPos::create([
                 'id_kasir' => $kasir->id_kasir,
@@ -111,6 +153,9 @@ class TransactionService
                 'tanggal_jam' => $data['tanggal_jam'] ?? now(),
                 'total_bayar' => $totalBayar,
                 'ppn' => $ppn,
+                'poin_earned' => $poinEarned,
+                'poin_redeemed' => $poinRedeemed,
+                'potongan_poin' => $potonganPoin,
             ]);
 
             $savedDetails = [];
@@ -121,6 +166,36 @@ class TransactionService
                     'jumlah' => $detail['jumlah'],
                     'harga_satuan' => $detail['harga_satuan'],
                 ]);
+            }
+
+            // Perbarui poin anggota dan catat riwayat
+            if ($anggota && $anggota->status === 'Aktif') {
+                $anggota->poin = $anggota->poin - $poinRedeemed + $poinEarned;
+                $anggota->save();
+
+                if ($poinEarned > 0) {
+                    \App\Models\RiwayatPoin::create([
+                        'id_anggota' => $anggota->id_anggota,
+                        'id_transaksi' => $transaksi->id_transaksi,
+                        'tipe' => 'earn',
+                        'poin' => $poinEarned,
+                        'nilai_rupiah' => 0,
+                        'tanggal_jam' => $transaksi->tanggal_jam ?: now(),
+                        'keterangan' => 'Earn ' . $poinEarned . ' poin dari transaksi POS #' . $transaksi->id_transaksi,
+                    ]);
+                }
+
+                if ($poinRedeemed > 0) {
+                    \App\Models\RiwayatPoin::create([
+                        'id_anggota' => $anggota->id_anggota,
+                        'id_transaksi' => $transaksi->id_transaksi,
+                        'tipe' => 'redeem',
+                        'poin' => $poinRedeemed,
+                        'nilai_rupiah' => $potonganPoin,
+                        'tanggal_jam' => $transaksi->tanggal_jam ?: now(),
+                        'keterangan' => 'Redeem ' . $poinRedeemed . ' poin pada transaksi POS #' . $transaksi->id_transaksi,
+                    ]);
+                }
             }
 
             $transaksiForJurnal = $transaksi->fresh()->load(['kasir', 'detailTransaksi.produk']);
