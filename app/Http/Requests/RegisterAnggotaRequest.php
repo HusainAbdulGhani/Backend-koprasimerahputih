@@ -9,6 +9,32 @@ class RegisterAnggotaRequest extends BaseApiRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Bersihkan data jika username sama dengan anggota yang ditolak
+        $username = $this->input('username');
+        if ($username) {
+            $existingAccount = \App\Models\Account::where('username', $username)->first();
+            if ($existingAccount && $existingAccount->anggota && $existingAccount->anggota->status === 'Ditolak') {
+                $existingAccount->anggota->delete();
+                $existingAccount->delete();
+            }
+        }
+
+        // Bersihkan data jika email sama dengan anggota yang ditolak
+        $email = $this->input('email');
+        if ($email) {
+            $existingMember = \App\Models\Anggota::where('email', $email)->first();
+            if ($existingMember && $existingMember->status === 'Ditolak') {
+                $account = $existingMember->account;
+                $existingMember->delete();
+                if ($account) {
+                    $account->delete();
+                }
+            }
+        }
+    }
+
     public function rules(): array
     {
         return [
@@ -22,3 +48,4 @@ class RegisterAnggotaRequest extends BaseApiRequest
         ];
     }
 }
+

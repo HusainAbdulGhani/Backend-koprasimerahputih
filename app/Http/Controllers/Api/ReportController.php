@@ -50,7 +50,7 @@ class ReportController extends Controller
 
             $query = TransaksiPos::query()
                 ->select(['id_transaksi', 'id_kasir', 'id_anggota', 'tanggal_jam', 'total_bayar', 'ppn'])
-                ->with(['kasir:id_kasir,id_account,nama_kasir,id_cabang', 'kasir.cabang:id_cabang,nama_cabang']);
+                ->with(['kasir:id_kasir,id_account,nama_kasir,id_cabang', 'kasir.cabang:id_cabang,nama_cabang', 'anggota:id_anggota,nama_anggota']);
 
             if ($period === 'daily' && $date) {
                 $query->whereDate('tanggal_jam', $date);
@@ -546,7 +546,7 @@ class ReportController extends Controller
             $limit = $this->reportLimit($request);
 
             $query = Anggota::query()
-                ->select(['id_anggota', 'nomor_anggota', 'nama_anggota', 'status', 'id_cabang'])
+                ->select(['id_anggota', 'nomor_anggota', 'nama_anggota', 'status', 'id_cabang', 'email', 'no_hp', 'tanggal_daftar'])
                 ->with('cabang:id_cabang,nama_cabang');
             if ($cabangScope !== null) {
                 $query->where('id_cabang', $cabangScope);
