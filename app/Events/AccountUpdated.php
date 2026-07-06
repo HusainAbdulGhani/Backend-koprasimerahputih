@@ -29,9 +29,16 @@ class AccountUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        if (!$this->account->relationLoaded('anggota') || ($this->account->anggota && !$this->account->anggota->relationLoaded('cabang'))) {
+            $this->account->load('anggota.cabang');
+        }
         return [
             'action' => $this->action,
             'id_account' => $this->account->id_account,
+            'id_anggota' => $this->account->anggota?->id_anggota,
+            'nama_anggota' => $this->account->anggota?->nama_anggota,
+            'id_cabang' => $this->account->anggota?->id_cabang,
+            'nama_cabang' => $this->account->anggota?->cabang?->nama_cabang,
             'available_roles' => $this->account->availableRoles(),
             'anggota_status' => $this->account->anggota?->status,
             'sent_at' => now()->toISOString(),

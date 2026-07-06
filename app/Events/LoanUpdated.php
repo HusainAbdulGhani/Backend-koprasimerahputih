@@ -29,10 +29,16 @@ class LoanUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        if (!$this->pinjaman->relationLoaded('anggota')) {
+            $this->pinjaman->load('anggota');
+        }
         return [
             'action' => $this->action,
             'id_pinjaman' => $this->pinjaman->id_pinjaman,
             'id_anggota' => $this->pinjaman->id_anggota,
+            'nama_anggota' => $this->pinjaman->anggota?->nama_anggota,
+            'id_cabang' => $this->pinjaman->anggota?->id_cabang,
+            'jumlah' => $this->pinjaman->jumlah_pinjaman,
             'status' => $this->pinjaman->status,
             'sent_at' => now()->toISOString(),
         ];

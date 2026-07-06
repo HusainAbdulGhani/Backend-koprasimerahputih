@@ -29,10 +29,17 @@ class SavingUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        if (!$this->simpanan->relationLoaded('anggota')) {
+            $this->simpanan->load('anggota');
+        }
         return [
             'action'      => $this->action,
             'id_simpanan' => $this->simpanan->id_simpanan,
             'id_anggota'  => $this->simpanan->id_anggota,
+            'nama_anggota'=> $this->simpanan->anggota?->nama_anggota,
+            'id_cabang'   => $this->simpanan->anggota?->id_cabang,
+            'jenis_simpanan' => $this->simpanan->jenis_simpanan,
+            'jumlah'      => $this->simpanan->jumlah,
             'status'      => $this->simpanan->status,
             'sent_at'     => now()->toISOString(),
         ];

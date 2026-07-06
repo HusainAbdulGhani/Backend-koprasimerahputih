@@ -206,7 +206,7 @@ class SimpananController extends Controller
             app(JurnalService::class)->catatSimpananMasuk($simpanan->load('anggota'));
         }
 
-        broadcast(new SavingUpdated($isMember ? 'store_pending' : 'store_verified', $simpanan->load('anggota')))->toOthers();
+        broadcast(new SavingUpdated($isMember ? 'store_pending' : 'store_verified', $simpanan->load('anggota')));
 
         return $this->successResponse(
             $isMember ? 'Bukti setoran berhasil diunggah, mohon tunggu verifikasi.' : 'Simpanan berhasil dicatat.',
@@ -225,7 +225,7 @@ class SimpananController extends Controller
         $simpanan->update(['status' => 'Verified']);
         app(JurnalService::class)->catatSimpananMasuk($simpanan->fresh('anggota'));
 
-        broadcast(new SavingUpdated('verified', $simpanan->fresh('anggota')))->toOthers();
+        broadcast(new SavingUpdated('verified', $simpanan->fresh('anggota')));
 
         return $this->successResponse('Setoran simpanan berhasil diverifikasi.', $simpanan->fresh('anggota'));
     }
@@ -239,7 +239,7 @@ class SimpananController extends Controller
 
         $simpanan->update(['status' => 'Rejected']);
 
-        broadcast(new SavingUpdated('rejected', $simpanan->fresh('anggota')))->toOthers();
+        broadcast(new SavingUpdated('rejected', $simpanan->fresh('anggota')));
 
         return $this->successResponse('Setoran simpanan berhasil ditolak.', $simpanan->fresh('anggota'));
     }

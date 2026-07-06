@@ -47,7 +47,7 @@ class AngsuranController extends Controller
             'sisa_pinjaman' => 0,
         ]);
 
-        $angsuran->load('pinjaman');
+        $angsuran->load('pinjaman.anggota');
         broadcast(new \App\Events\LoanUpdated('installment_created', $angsuran->pinjaman));
 
         return $this->successResponse('Bukti transfer berhasil diupload, mohon tunggu verifikasi.', $angsuran);
@@ -127,6 +127,7 @@ class AngsuranController extends Controller
                 ]);
             }
 
+            $pinjaman->load('anggota');
             broadcast(new \App\Events\LoanUpdated('installment_verified', $pinjaman));
 
             return $this->successResponse('Pembayaran berhasil diverifikasi.', [
@@ -150,7 +151,7 @@ class AngsuranController extends Controller
 
         $angsuran->update(['status' => 'Rejected']);
 
-        $angsuran->load('pinjaman');
+        $angsuran->load('pinjaman.anggota');
         broadcast(new \App\Events\LoanUpdated('installment_rejected', $angsuran->pinjaman));
 
         return $this->successResponse('Pembayaran berhasil ditolak.', $angsuran->fresh('pinjaman'));
