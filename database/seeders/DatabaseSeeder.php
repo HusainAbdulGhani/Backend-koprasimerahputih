@@ -26,10 +26,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        DB::beginTransaction();
-
-        try {
-            // Kosongkan seluruh tabel terkait (Truncate)
+        // Kosongkan seluruh tabel terkait (Truncate)
             Schema::disableForeignKeyConstraints();
             DB::table('detail_jurnals')->truncate();
             DB::table('jurnals')->truncate();
@@ -116,7 +113,7 @@ class DatabaseSeeder extends Seeder
 
             // Admin
             $accAdmin = Account::firstOrCreate(
-                ['username' => 'admin_husain'],
+                ['username' => 'admin_koperasi'],
                 ['password' => Hash::make('password123'), 'role' => 'Admin']
             );
             $accAdmin->syncRoles(['Admin']);
@@ -129,7 +126,7 @@ class DatabaseSeeder extends Seeder
 
             // Pengurus Utama
             $accPengurus = Account::firstOrCreate(
-                ['username' => 'pengurus_koperasi'],
+                ['username' => 'pengurus_bandung_barat'],
                 ['password' => Hash::make('password123'), 'role' => 'Pengurus']
             );
             $accPengurus->syncRoles(['Pengurus']);
@@ -451,11 +448,5 @@ class DatabaseSeeder extends Seeder
                     ]
                 );
             }
-
-            DB::commit();
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
     }
 }
